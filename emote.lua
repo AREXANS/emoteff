@@ -3366,7 +3366,7 @@ local function ZPXB_routine() -- Script: StarterGui.AFEM.EmoteList
 	
 	local s = pcall(function()
 		print("[AFEM] -  Pulling emotes from YARHM website...")
-		emList = http:JSONDecode(game:HttpGet("https://raw.githubusercontent.com/AREXANS/Emoteroblox/refs/heads/main/emote.json?token=GHSAT0AAAAAADKNJXFO4TOZFOR4KYODTL5K2FZMDSQ"))
+		emList = http:JSONDecode(game:HttpGet("https://raw.githubusercontent.com/AREXANS/emoteff/refs/heads/main/emote.json"))
 	end)
 	if not s then
 		print("[AFEM] - Getting from website failed. Using fallback...")
