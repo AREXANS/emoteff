@@ -1,23 +1,3 @@
---[[
-    ===============================================================================================================
-    == PENTING: AGAR SKRIP KEMBALI SETELAH PINDAH SERVER (HOP SERVER)                                             ==
-    ===============================================================================================================
-    
-    Metode ini TIDAK memerlukan folder auto-execute, tetapi memerlukan Anda untuk melakukan setup satu kali.
-
-    CARA SETUP:
-    1. Salin SELURUH kode dari file ini.
-    2. Buka situs seperti https://pastebin.com atau https://gist.github.com.
-    3. Tempel kode yang sudah Anda salin dan buat sebuah 'paste' baru.
-    4. Dapatkan URL "RAW" dari paste tersebut. 
-       - Di Pastebin, biasanya ada tombol "raw".
-       - Di GitHub Gist, ada tombol "Raw".
-    5. GANTI nilai variabel SCRIPT_URL di bawah ini dengan URL raw yang Anda dapatkan.
-
-    Setelah setup, skrip ini akan secara otomatis menjadwalkan dirinya untuk dieksekusi kembali setiap kali 
-    Anda menggunakan tombol "Hop Server", selama executor Anda mendukung fungsi `queue_on_teleport`.
-]]
-
 local SCRIPT_URL = "https://raw.githubusercontent.com/AREXANS/emoteff/refs/heads/main/Arexanstools.lua" -- << WAJIB DIISI!
 
 -- Mencegah GUI dibuat berulang kali jika skrip dieksekusi lebih dari sekali tanpa me-refresh game.
