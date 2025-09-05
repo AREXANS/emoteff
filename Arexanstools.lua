@@ -61,6 +61,10 @@ task.spawn(function()
     local savedTeleportLocations = {}
     local TELEPORT_SAVE_FILE = "ArexansTools_Teleports_" .. tostring(game.PlaceId) .. ".json"
     
+    -- BARU: Variabel untuk menyimpan posisi GUI
+    local GUI_POSITIONS_SAVE_FILE = "ArexansTools_GuiPositions_" .. tostring(game.PlaceId) .. ".json"
+    local loadedGuiPositions = nil
+
     -- Variabel AntiFling
     local antifling_velocity_threshold = 85
     local antifling_angular_threshold = 25
@@ -391,6 +395,79 @@ task.spawn(function()
         task.delay(3, function() TweenService:Create(notifFrame, tweenInfo, {Position = UDim2.new(0.5, -100, 0, -60)}):Play(); task.wait(0.5); notifFrame:Destroy() end)
     end
     
+    -- BARU: Fungsi untuk menyimpan dan memuat posisi GUI
+    local function saveGuiPositions()
+        if not writefile then
+            showNotification("Executor tidak mendukung penyimpanan file.", Color3.fromRGB(200, 50, 50))
+            return
+        end
+    
+        local positionsToSave = {}
+    
+        -- Helper untuk mendapatkan data posisi dari objek GUI
+        local function getPositionData(guiObject)
+            if guiObject and guiObject.Parent then
+                return {
+                    XScale = guiObject.Position.X.Scale,
+                    XOffset = guiObject.Position.X.Offset,
+                    YScale = guiObject.Position.Y.Scale,
+                    YOffset = guiObject.Position.Y.Offset,
+                }
+            end
+            return nil
+        end
+    
+        positionsToSave.MainFrame = getPositionData(MainFrame)
+        positionsToSave.MiniToggleContainer = getPositionData(MiniToggleContainer)
+        if EmoteScreenGui then
+            positionsToSave.EmoteFrame = getPositionData(EmoteScreenGui:FindFirstChild("MainFrame"))
+        end
+        if AnimationScreenGui then
+            positionsToSave.Animationframe = getPositionData(AnimationScreenGui:FindFirstChild("GazeBro"))
+        end
+        if touchFlingGui then
+             positionsToSave.FlingFrame = getPositionData(touchFlingGui:FindFirstChild("Frame"))
+        end
+    
+        local success, result = pcall(function()
+            local jsonData = HttpService:JSONEncode(positionsToSave)
+            writefile(GUI_POSITIONS_SAVE_FILE, jsonData)
+        end)
+    
+        if success then
+            showNotification("Posisi UI berhasil disimpan!", Color3.fromRGB(50, 200, 50))
+        else
+            warn("Gagal menyimpan posisi GUI:", result)
+            showNotification("Gagal menyimpan posisi UI.", Color3.fromRGB(200, 50, 50))
+        end
+    end
+    
+    local function loadGuiPositions()
+        if not readfile or not isfile or not isfile(GUI_POSITIONS_SAVE_FILE) then
+            return
+        end
+    
+        local success, result = pcall(function()
+            local fileContent = readfile(GUI_POSITIONS_SAVE_FILE)
+            loadedGuiPositions = HttpService:JSONDecode(fileContent)
+    
+            -- Helper untuk menerapkan posisi
+            local function applyPosition(guiObject, posData)
+                if guiObject and guiObject.Parent and posData then
+                    guiObject.Position = UDim2.new(posData.XScale, posData.XOffset, posData.YScale, posData.YOffset)
+                end
+            end
+    
+            applyPosition(MainFrame, loadedGuiPositions.MainFrame)
+            applyPosition(MiniToggleContainer, loadedGuiPositions.MiniToggleContainer)
+        end)
+        
+        if not success then
+            warn("Gagal memuat posisi GUI:", result)
+            loadedGuiPositions = nil -- Reset jika gagal
+        end
+    end
+
     local function saveTeleportData()
         if not writefile then showNotification("Executor tidak mendukung penyimpanan file.", Color3.fromRGB(200, 50, 50)); return end
         local dataToSave = {}; for _, loc in ipairs(savedTeleportLocations) do table.insert(dataToSave, {Name = loc.Name, CFrameData = {loc.CFrame:GetComponents()}}) end
@@ -544,7 +621,12 @@ task.spawn(function()
         EmoteMainFrame.Name = "MainFrame"
         EmoteMainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
         EmoteMainFrame.Size = UDim2.new(0, 180, 0, 200)
+        -- Atur posisi default, lalu terapkan posisi yang disimpan jika ada
         EmoteMainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+        if loadedGuiPositions and loadedGuiPositions.EmoteFrame then
+            local posData = loadedGuiPositions.EmoteFrame
+            pcall(function() EmoteMainFrame.Position = UDim2.new(posData.XScale, posData.XOffset, posData.YScale, posData.YOffset) end)
+        end
         EmoteMainFrame.BackgroundColor3 = Color3.fromRGB(28, 43, 70)
         EmoteMainFrame.BorderColor3 = Color3.fromRGB(90, 150, 255)
         EmoteMainFrame.BorderSizePixel = 1
@@ -751,7 +833,12 @@ task.spawn(function()
             local frame = Instance.new("Frame")
             frame.Name = "GazeBro"
             frame.Size = getScaledSize(0.18, 0.28) 
+            -- Atur posisi default, lalu terapkan posisi yang disimpan jika ada
             frame.Position = UDim2.new(0.5, -frame.Size.X.Offset / 2, 0.5, -frame.Size.Y.Offset / 2)
+            if loadedGuiPositions and loadedGuiPositions.Animationframe then
+                local posData = loadedGuiPositions.Animationframe
+                pcall(function() frame.Position = UDim2.new(posData.XScale, posData.XOffset, posData.YScale, posData.YOffset) end)
+            end
             frame.BackgroundColor3 = Color3.fromRGB(25, 28, 40)
             frame.BackgroundTransparency = 0.2
             frame.BorderSizePixel = 2
@@ -1059,7 +1146,6 @@ task.spawn(function()
         if IsFlying then return end; local character = LocalPlayer.Character; if not (character and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChildOfClass("Humanoid")) then return end; local root = character:WaitForChild("HumanoidRootPart"); local humanoid = character:FindFirstChildOfClass("Humanoid"); local success, controlModule = pcall(require, LocalPlayer.PlayerScripts:WaitForChild("PlayerModule"):WaitForChild("ControlModule")); if not success then showNotification("Gagal memuat modul kontrol mobile.", Color3.fromRGB(255, 100, 100)); return end
         IsFlying = true; humanoid.PlatformStand = true; local bodyVelocity = Instance.new("BodyVelocity", root); bodyVelocity.Name = "FlyVelocity"; bodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9); bodyVelocity.Velocity = Vector3.new(0, 0, 0); local bodyGyro = Instance.new("BodyGyro", root); bodyGyro.Name = "FlyGyro"; bodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9); bodyGyro.P = 1000; bodyGyro.D = 50
         table.insert(FlyConnections, RunService.RenderStepped:Connect(function() if not IsFlying then return end; local camera = Workspace.CurrentCamera; if not (character and root and root:FindFirstChild("FlyVelocity") and root:FindFirstChild("FlyGyro")) then StopMobileFly(); return end; root.FlyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9); root.FlyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9); root.FlyGyro.CFrame = camera.CFrame; root.FlyVelocity.Velocity = Vector3.new(0, 0, 0); local direction = controlModule:GetMoveVector(); if direction.X ~= 0 then root.FlyVelocity.Velocity = root.FlyVelocity.Velocity + camera.CFrame.RightVector * (direction.X * (Settings.FlySpeed * 50)) end; if direction.Z ~= 0 then root.FlyVelocity.Velocity = root.FlyVelocity.Velocity - camera.CFrame.LookVector * (direction.Z * (Settings.FlySpeed * 50)) end end))
-        table.insert(FlyConnections, LocalPlayer.CharacterAdded:Connect(function() if IsFlying then task.wait(0.1); StartMobileFly() end end))
     end
 
     local function ToggleNoclip(enabled)
@@ -1082,7 +1168,14 @@ task.spawn(function()
 
     local function CreateTouchFlingGUI()
         if touchFlingGui and touchFlingGui.Parent then return end; local FlingScreenGui = Instance.new("ScreenGui"); FlingScreenGui.Parent = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui"); FlingScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling; FlingScreenGui.ResetOnSpawn = false; touchFlingGui = FlingScreenGui
-        local Frame = Instance.new("Frame", FlingScreenGui); Frame.BackgroundColor3 = Color3.fromRGB(170, 200, 255); Frame.BackgroundTransparency = 0.3; Frame.BorderSizePixel = 0; Frame.Position = UDim2.new(0.5, -45, 0, 20); Frame.Size = UDim2.new(0, 90, 0, 56); local FrameUICorner = Instance.new("UICorner", Frame); FrameUICorner.CornerRadius = UDim.new(0, 6); local FrameUIStroke = Instance.new("UIStroke", Frame); FrameUIStroke.Color = Color3.fromRGB(0, 100, 255); FrameUIStroke.Thickness = 1.5; FrameUIStroke.Transparency = 0.2
+        local Frame = Instance.new("Frame", FlingScreenGui); Frame.BackgroundColor3 = Color3.fromRGB(170, 200, 255); Frame.BackgroundTransparency = 0.3; Frame.BorderSizePixel = 0; 
+        -- Atur posisi default, lalu terapkan posisi yang disimpan jika ada
+        Frame.Position = UDim2.new(0.5, -45, 0, 20); 
+        if loadedGuiPositions and loadedGuiPositions.FlingFrame then
+            local posData = loadedGuiPositions.FlingFrame
+            pcall(function() Frame.Position = UDim2.new(posData.XScale, posData.XOffset, posData.YScale, posData.YOffset) end)
+        end
+        Frame.Size = UDim2.new(0, 90, 0, 56); local FrameUICorner = Instance.new("UICorner", Frame); FrameUICorner.CornerRadius = UDim.new(0, 6); local FrameUIStroke = Instance.new("UIStroke", Frame); FrameUIStroke.Color = Color3.fromRGB(0, 100, 255); FrameUIStroke.Thickness = 1.5; FrameUIStroke.Transparency = 0.2
         -- ## PERBAIKAN: TitleBar diubah menjadi TextButton untuk geser yang lebih baik
         local TitleBar = Instance.new("TextButton", Frame); TitleBar.BackgroundColor3 = Color3.fromRGB(140, 170, 235); TitleBar.BackgroundTransparency = 0.4; TitleBar.BorderSizePixel = 0; TitleBar.Size = UDim2.new(1, 0, 0, 18); TitleBar.Text = ""; TitleBar.AutoButtonColor = false
         MakeDraggable(Frame, TitleBar, function() return true end, nil) -- Terapkan fungsi geser
@@ -1146,10 +1239,6 @@ task.spawn(function()
         DisableAllFeatures(); ScreenGui:Destroy(); if touchFlingGui and touchFlingGui.Parent then touchFlingGui:Destroy() end
     end
     
-    LocalPlayer.CharacterAdded:Connect(function(character)
-        task.wait(0.1); if character:FindFirstChildOfClass("Humanoid") then character.Humanoid.WalkSpeed = IsWalkSpeedEnabled and Settings.WalkSpeed or OriginalWalkSpeed end; if antifling_enabled then ToggleAntiFling(true) end; if IsGodModeEnabled then applyGodMode(character) end 
-    end)
-    
     -- ====================================================================
     -- == BAGIAN PEMBUATAN ELEMEN UI (SLIDER, TOGGLE, DLL)             ==
     -- ====================================================================
@@ -1206,7 +1295,7 @@ task.spawn(function()
 
     local searchFrame = Instance.new("Frame", playerHeaderFrame); searchFrame.Size = UDim2.new(1, 0, 0, 25); searchFrame.Position = UDim2.new(0, 0, 0, 20); searchFrame.BackgroundTransparency = 1
     local searchTextBox = Instance.new("TextBox", searchFrame); searchTextBox.Size = UDim2.new(0.7, -10, 1, 0); searchTextBox.Position = UDim2.new(0, 5, 0, 0); searchTextBox.BackgroundColor3 = Color3.fromRGB(35, 35, 35); searchTextBox.TextColor3 = Color3.fromRGB(200, 200, 200); searchTextBox.PlaceholderText = "Cari Pemain..."; searchTextBox.TextSize = 12; searchTextBox.Font = Enum.Font.SourceSans; searchTextBox.ClearTextOnFocus = true; local sboxCorner = Instance.new("UICorner", searchTextBox); sboxCorner.CornerRadius = UDim.new(0, 5)
-    local searchButton = Instance.new("TextButton", searchFrame); searchButton.Size = UDim2.new(0.3, 0, 1, 0); searchButton.Position = UDim2.new(0.7, 0, 0, 0); searchButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255); searchButton.BorderSizePixel = 0; searchButton.Text = "Cari"; searchButton.TextColor3 = Color3.fromRGB(255, 255, 255); searchButton.TextSize = 12; searchButton.Font = Enum.Font.SourceSansBold; local sbtnCorner = Instance.new("UICorner", searchButton); sbtnCorner.CornerRadius = UDim.new(0, 5)
+    local searchButton = Instance.new("TextButton", searchFrame); searchButton.Size = UDim2.new(0.3, 0, 1, 0); searchButton.Position = UDim2.new(0.7, 0, 0, 0); searchButton.BackgroundColor3 = Color3.fromRGB(0, 150,  255); searchButton.BorderSizePixel = 0; searchButton.Text = "Cari"; searchButton.TextColor3 = Color3.fromRGB(255, 255, 255); searchButton.TextSize = 12; searchButton.Font = Enum.Font.SourceSansBold; local sbtnCorner = Instance.new("UICorner", searchButton); sbtnCorner.CornerRadius = UDim.new(0, 5)
     
     local function createPlayerButton(player)
         local playerFrame = Instance.new("Frame", PlayerListContainer); playerFrame.Size = UDim2.new(1, 0, 0, 50); playerFrame.BackgroundTransparency = 1; playerFrame.Name = player.Name
@@ -1308,10 +1397,12 @@ task.spawn(function()
         isAnimationTransparent = v
         if isAnimationEnabled and applyAnimationTransparency then applyAnimationTransparency(v) end
     end).LayoutOrder = 3
-    createButton(SettingsTabContent, "Tutup Skrip", CloseScript).LayoutOrder = 4
+    -- BARU: Tombol untuk menyimpan posisi UI
+    createButton(SettingsTabContent, "Simpan Posisi UI", saveGuiPositions).LayoutOrder = 4
+    createButton(SettingsTabContent, "Tutup Skrip", CloseScript).LayoutOrder = 5
     
     -- =================================================================================
-    -- == FUNGSI UNTUK MEMBUAT GUI DAPAT DIGESER (DRAGGABLE)                          ==
+    -- == BAGIAN UTAMA DAN KONEKSI EVENT                                              ==
     -- =================================================================================
     
     MakeDraggable(MainFrame, TitleBar, function() return true end, nil)
@@ -1355,9 +1446,71 @@ task.spawn(function()
         if processed then return end; if input.KeyCode == Enum.KeyCode.F and not UserInputService.TouchEnabled then if not IsFlying then StartFly() else StopFly() end end 
     end)
     
+    -- [[ PERBAIKAN ANTI-RESET SAAT RESPAWN ]]
+    -- Fungsi ini akan menerapkan kembali semua fitur yang aktif ke karakter baru Anda.
+    local function reapplyFeaturesOnRespawn(character)
+        if not character then return end
+    
+        -- Menunggu sebentar agar karakter dan humanoid sepenuhnya dimuat
+        task.wait(0.2) 
+    
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if not humanoid then return end
+    
+        -- Terapkan kembali WalkSpeed
+        if IsWalkSpeedEnabled then
+            humanoid.WalkSpeed = Settings.WalkSpeed
+        else
+            humanoid.WalkSpeed = OriginalWalkSpeed
+        end
+    
+        -- Terapkan kembali GodMode
+        if IsGodModeEnabled then
+            applyGodMode(character)
+        end
+    
+        -- Terapkan kembali Anti-Fling
+        if antifling_enabled then
+            ToggleAntiFling(true)
+        end
+        
+        -- Terapkan kembali Noclip
+        if IsNoclipEnabled then
+            ToggleNoclip(true) -- Memulai kembali loop noclip pada karakter baru
+        end
+    
+        -- Terapkan kembali Infinity Jump
+        if IsInfinityJumpEnabled then
+            if infinityJumpConnection then infinityJumpConnection:Disconnect() end -- Hapus koneksi lama
+            infinityJumpConnection = UserInputService.JumpRequest:Connect(function()
+                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+                    LocalPlayer.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                end
+            end)
+        end
+    
+        -- Terapkan kembali Fly
+        if IsFlying then
+            IsFlying = false -- Reset sementara status untuk mengizinkan StartFly/StartMobileFly berjalan kembali
+            if UserInputService.TouchEnabled then
+                StartMobileFly()
+            else
+                StartFly()
+            end
+        end
+    end
+    
+    -- Sambungkan fungsi di atas ke event CharacterAdded
+    LocalPlayer.CharacterAdded:Connect(reapplyFeaturesOnRespawn)
+
     -- INISIALISASI
     loadTeleportData()
+    loadGuiPositions()
     switchTab("Player")
-    if LocalPlayer.Character and IsGodModeEnabled then applyGodMode(LocalPlayer.Character) end
+    
+    -- Terapkan fitur ke karakter yang sudah ada saat skrip dieksekusi pertama kali
+    if LocalPlayer.Character then
+        reapplyFeaturesOnRespawn(LocalPlayer.Character)
+    end
 end)
 
