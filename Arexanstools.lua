@@ -81,6 +81,10 @@ task.spawn(function()
     -- Fitur Animasi VIP (Integrasi)
     local isAnimationEnabled = false 
     local AnimationScreenGui = nil 
+    
+    -- ## PERBAIKAN ANIMASI: Variabel Global untuk menyimpan animasi
+    local lastAnimations = {}
+    local ANIMATION_SAVE_FILE = "ArexansTools_Animations.json" -- File penyimpanan global
 
     -- Membuat GUI utama
     local ScreenGui = Instance.new("ScreenGui")
@@ -486,6 +490,16 @@ task.spawn(function()
         if not success then warn("Gagal memuat data teleport:", result) end
     end
     
+    -- ## PERBAIKAN ANIMASI: Fungsi untuk memuat animasi dari file
+    local function loadAnimations()
+        if isfile and isfile(ANIMATION_SAVE_FILE) and readfile then
+            local success, data = pcall(function() return HttpService:JSONDecode(readfile(ANIMATION_SAVE_FILE)) end)
+            if success and type(data) == "table" then
+                lastAnimations = data
+            end
+        end
+    end
+
     local function showRenamePrompt(locationIndex, callback)
         local oldName = savedTeleportLocations[locationIndex].Name
         local promptFrame = Instance.new("Frame"); promptFrame.Size = UDim2.new(0, 200, 0, 100); promptFrame.Position = UDim2.new(0.5, -100, 0.5, -50); promptFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30); promptFrame.BorderSizePixel = 0; promptFrame.ZIndex = 10; promptFrame.Parent = MainFrame
@@ -652,7 +666,7 @@ task.spawn(function()
         Title.Position = UDim2.new(0, 10, 0, 0)
         Title.BackgroundTransparency = 1
         Title.Font = Enum.Font.GothamBold
-        Title.Text = "Emotes"
+        Title.Text = "Arexans Emotes [VIP]" -- [[ PERUBAHAN ]] Judul diubah
         Title.TextColor3 = Color3.fromRGB(255, 255, 255)
         Title.TextXAlignment = Enum.TextXAlignment.Left
         Title.Parent = Header
@@ -674,25 +688,14 @@ task.spawn(function()
         end)
         
         MakeDraggable(EmoteMainFrame, Header, function() return true end, nil)
-
-        local SearchBox = Instance.new("TextBox")
-        SearchBox.Name = "SearchBox"
-        SearchBox.Size = UDim2.new(1, -20, 0, 25)
-        SearchBox.Position = UDim2.new(0, 10, 0, 35)
-        SearchBox.BackgroundColor3 = Color3.fromRGB(48, 63, 90)
-        SearchBox.PlaceholderText = "Cari emote..."
-        SearchBox.PlaceholderColor3 = Color3.fromRGB(180, 190, 210)
-        SearchBox.Font = Enum.Font.Gotham
-        SearchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-        SearchBox.ClearTextOnFocus = false
-        SearchBox.Parent = EmoteMainFrame
-        local SearchCorner = Instance.new("UICorner", SearchBox); SearchCorner.CornerRadius = UDim.new(0, 6)
-        local SearchPadding = Instance.new("UIPadding", SearchBox); SearchPadding.PaddingLeft = UDim.new(0, 10); SearchPadding.PaddingRight = UDim.new(0, 10)
+        
+        -- [[ PERUBAHAN ]] Kotak pencarian dihapus
+        -- local SearchBox = Instance.new("TextBox") ... (seluruh blok dihapus)
 
         local EmoteArea = Instance.new("ScrollingFrame")
         EmoteArea.Name = "EmoteArea"
-        EmoteArea.Size = UDim2.new(1, 0, 1, -70)
-        EmoteArea.Position = UDim2.new(0, 0, 0, 65)
+        EmoteArea.Size = UDim2.new(1, 0, 1, -40) -- [[ PERUBAHAN ]] Ukuran disesuaikan
+        EmoteArea.Position = UDim2.new(0, 0, 0, 35) -- [[ PERUBAHAN ]] Posisi disesuaikan
         EmoteArea.BackgroundTransparency = 1
         EmoteArea.BorderSizePixel = 0
         EmoteArea.ScrollBarImageColor3 = Color3.fromRGB(90, 150, 255)
@@ -740,14 +743,7 @@ task.spawn(function()
             return button
         end
 
-        local function populateEmotes(filter)
-            filter = filter and filter:lower() or ""
-            EmoteArea.CanvasPosition = Vector2.zero
-            for _, button in pairs(EmoteArea:GetChildren()) do
-                if button:IsA("ImageButton") then button.Visible = (filter == "" or button.Name:lower():find(filter, 1, true)) end
-            end
-            updateCanvasSize()
-        end
+        -- [[ PERUBAHAN ]] Fungsi populateEmotes dan koneksi ke SearchBox dihapus
 
         task.spawn(function()
             local success, result = pcall(function() return HttpService:JSONDecode(game:HttpGet("https://raw.githubusercontent.com/AREXANS/emoteff/main/emote.json")) end)
@@ -765,8 +761,6 @@ task.spawn(function()
             if applyEmoteTransparency then applyEmoteTransparency(isEmoteTransparent) end
         end)
 
-        SearchBox:GetPropertyChangedSignal("Text"):Connect(function() populateEmotes(SearchBox.Text) end)
-        
         if applyEmoteTransparency then
             applyEmoteTransparency(isEmoteTransparent)
         end
@@ -778,7 +772,6 @@ task.spawn(function()
         if not mainFrame then return end
 
         local header = mainFrame:FindFirstChild("Header")
-        local searchBox = mainFrame:FindFirstChild("SearchBox")
         
         local transValue = 0.85
         local opaqueValue = 0
@@ -786,7 +779,7 @@ task.spawn(function()
         mainFrame.BackgroundTransparency = isTransparent and transValue or opaqueValue
         EmoteToggleButton.BackgroundTransparency = isTransparent and transValue or 0
         if header then header.BackgroundTransparency = isTransparent and transValue or opaqueValue end
-        if searchBox then searchBox.BackgroundTransparency = isTransparent and transValue or opaqueValue end
+        -- if searchBox then searchBox.BackgroundTransparency = isTransparent and transValue or opaqueValue end -- [[ PERUBAHAN ]] Dihapus
 
         local emoteArea = mainFrame:FindFirstChild("EmoteArea")
         if emoteArea then
@@ -862,7 +855,7 @@ task.spawn(function()
             local labelSize = UDim2.new(1, 0, 1, 0)
             local gazeLabel = Instance.new("TextLabel", animHeader)
             gazeLabel.Name = "GazeLabel"
-            gazeLabel.Text = "GAZE"
+            gazeLabel.Text = "Arexans Anim [VIP]"
             gazeLabel.Font = Enum.Font.SourceSansBold
             gazeLabel.TextScaled = true
             gazeLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -885,22 +878,13 @@ task.spawn(function()
                 AnimationShowButton.Visible = true
             end)
 
-            local searchBar = Instance.new("TextBox", frame)
-            searchBar.Name = "SearchBar"
-            searchBar.PlaceholderText = "Search..."
-            searchBar.Font = Enum.Font.SourceSans
-            searchBar.TextScaled = true
-            searchBar.TextColor3 = Color3.fromRGB(200, 200, 200)
-            searchBar.BackgroundColor3 = Color3.fromRGB(40, 45, 60)
-            searchBar.BorderSizePixel = 0
-            searchBar.Size = UDim2.new(0.9, 0, 0.1, 0)
-            searchBar.Position = UDim2.new(0.05, 0, 0.12, 0)
-            searchBar.ClearTextOnFocus = true
+            -- [[ PERUBAHAN ]] Kotak pencarian dihapus
+            -- local searchBar = Instance.new("TextBox", frame) ... (seluruh blok dihapus)
 
             local scrollFrame = Instance.new("ScrollingFrame", frame)
             scrollFrame.Name = "ScrollFrame"
-            scrollFrame.Size = UDim2.new(0.9, 0, 0.75, 0)
-            scrollFrame.Position = UDim2.new(0.05, 0, 0.23, 0)
+            scrollFrame.Size = UDim2.new(0.9, 0, 0.86, 0) -- [[ PERUBAHAN ]] Ukuran disesuaikan
+            scrollFrame.Position = UDim2.new(0.05, 0, 0.12, 0) -- [[ PERUBAHAN ]] Posisi disesuaikan
             scrollFrame.BackgroundColor3 = Color3.fromRGB(35, 40, 55)
             scrollFrame.BorderSizePixel = 0
             scrollFrame.ScrollBarThickness = 6
@@ -940,20 +924,7 @@ task.spawn(function()
                 scrollFrame.CanvasSize = UDim2.new(0, 0, 0, #buttons * 30)
             end
 
-            searchBar:GetPropertyChangedSignal("Text"):Connect(function()
-                local searchText = searchBar.Text:lower()
-                local order = 0
-                for _, button in ipairs(buttons) do
-                    if searchText == "" or button.Text:lower():find(searchText) then
-                        button.Visible = true
-                        button.Position = UDim2.new(0, 0, 0, order * 30) 
-                        order = order + 1
-                    else
-                        button.Visible = false
-                    end
-                end
-                scrollFrame.CanvasSize = UDim2.new(0, 0, 0, order * 30)
-            end)
+            -- [[ PERUBAHAN ]] Koneksi ke SearchBar dihapus
             
             local isResizing = false
             local initialMousePosition, initialFrameSize
@@ -962,7 +933,6 @@ task.spawn(function()
             UserInputService.InputEnded:Connect(function(input) if isResizing and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then isResizing = false; end end)
             
             local speaker = Players.LocalPlayer
-            local lastAnimations = {}
 
             local function StopAnim()
                 local char = speaker.Character; if not char then return end
@@ -1012,7 +982,15 @@ task.spawn(function()
             local function ResetClimb() pcall(function() StopAnim(); speaker.Character.Animate.climb.ClimbAnim.AnimationId = "http://www.roblox.com/asset/?id=0" end) end
             
             local function setAnimation(animationType, animationId)
-                local function saveLastAnimations() if writefile then pcall(function() local data = HttpService:JSONEncode(lastAnimations); writefile("MeWhenUrMom.json", data) end) end end
+                -- ## PERBAIKAN ANIMASI: Fungsi untuk menyimpan animasi ke file global
+                local function saveLastAnimations() 
+                    if writefile then 
+                        pcall(function() 
+                            local data = HttpService:JSONEncode(lastAnimations)
+                            writefile(ANIMATION_SAVE_FILE, data) 
+                        end) 
+                    end 
+                end
                 local char = speaker.Character; if not char then return end
                 local Anim = char:FindFirstChild("Animate"); if not Anim then return end
                 local humanoid = char:WaitForChild("Humanoid"); humanoid.PlatformStand = true; task.wait(0.1)
@@ -1028,14 +1006,7 @@ task.spawn(function()
                 saveLastAnimations(); task.wait(0.1); humanoid.PlatformStand = false
             end
             
-            local function loadLastAnimations()
-                if isfile and isfile("MeWhenUrMom.json") and readfile then
-                    local s, data = pcall(function() return HttpService:JSONDecode(readfile("MeWhenUrMom.json")) end)
-                    if s and data then
-                        if data.Idle then setAnimation("Idle", data.Idle) end; if data.Walk then setAnimation("Walk", data.Walk) end; if data.Run then setAnimation("Run", data.Run) end; if data.Jump then setAnimation("Jump", data.Jump) end; if data.Fall then setAnimation("Fall", data.Fall) end; if data.Climb then setAnimation("Climb", data.Climb) end; if data.Swim then setAnimation("Swim", data.Swim) end; if data.SwimIdle then setAnimation("SwimIdle", data.SwimIdle) end
-                    end
-                end
-            end
+            -- Hapus fungsi loadLastAnimations lokal, karena sudah ada di global
             
             local function PlayEmote(animationId) StopAnim(); local track = loadAnimation(animationId); track:Play(); local conn; conn = RunService.RenderStepped:Connect(function() if speaker.Character:WaitForChild("Humanoid").MoveDirection.Magnitude > 0 then track:Stop(); conn:Disconnect() end end) end
             local function ZeroPlayEmote(animationId) StopAnim(); local track = loadAnimation(animationId); track:Play(); track:AdjustSpeed(0); local conn; conn = RunService.RenderStepped:Connect(function() if speaker.Character:WaitForChild("Humanoid").MoveDirection.Magnitude > 0 then track:Stop(); conn:Disconnect() end end) end
@@ -1068,26 +1039,15 @@ task.spawn(function()
             for name, id in pairs(Animations.Swim) do task.wait(); createAnimationButton(name, "Swim", id) end
             for name, id in pairs(Animations.Climb) do task.wait(); createAnimationButton(name, "Climb", id) end
 
-            speaker.CharacterAdded:Connect(function(character)
-                task.wait(0.2)
-                pcall(function()
-                    if lastAnimations.Idle then setAnimation("Idle", lastAnimations.Idle) end
-                    if lastAnimations.Walk then setAnimation("Walk", lastAnimations.Walk) end
-                    if lastAnimations.Run then setAnimation("Run", lastAnimations.Run) end
-                    if lastAnimations.Jump then setAnimation("Jump", lastAnimations.Jump) end
-                    if lastAnimations.Fall then setAnimation("Fall", lastAnimations.Fall) end
-                    if lastAnimations.Climb then setAnimation("Climb", lastAnimations.Climb) end
-                    if lastAnimations.Swim then setAnimation("Swim", lastAnimations.Swim) end
-                    if lastAnimations.SwimIdle then setAnimation("SwimIdle", lastAnimations.SwimIdle) end
-                end)
-            end)
+            -- ## PERBAIKAN ANIMASI: Hapus CharacterAdded lokal, akan ditangani secara global
+            -- speaker.CharacterAdded:Connect(...) DIHAPUS DARI SINI
             
             AddDonate(20, 1131371530); AddDonate(200, 1131065702); AddDonate(183, 1129915318); AddDonate(2000, 1128299749)
             AddEmote("Dance 1", 12521009666); AddEmote("Dance 2", 12521169800); AddEmote("Dance 3", 12521178362); AddEmote("Cheer", 12521021991); AddEmote("Laugh", 12521018724); AddEmote("Point", 12521007694); AddEmote("Wave", 12521004586)
             AddFEmote("Soldier - Assault Fire", 4713811763); AddEmote("Soldier - Assault Aim", 4713633512); AddEmote("Zombie - Attack", 3489169607); AddFEmote("Zombie - Death", 3716468774); AddEmote("Roblox - Sleep", 2695918332); AddEmote("Roblox - Quake", 2917204509); AddEmote("Roblox - Rifle Reload", 3972131105)
             ZeroAddEmote("Accurate T Pose", 2516930867)
 
-            loadLastAnimations()
+            -- Tidak perlu load animasi di sini lagi
             
             if applyAnimationTransparency then
                 applyAnimationTransparency(isAnimationTransparent)
@@ -1102,13 +1062,12 @@ task.spawn(function()
         local transValue = 0.85
 
         if frame then
-            local searchBar = frame:FindFirstChild("SearchBar")
             local scrollFrame = frame:FindFirstChild("ScrollFrame")
             local resizeHandle = frame:FindFirstChild("ResizeHandle")
             
             frame.BackgroundTransparency = isTransparent and transValue or 0.2
             AnimationShowButton.BackgroundTransparency = isTransparent and transValue or 0.3
-            if searchBar then searchBar.BackgroundTransparency = isTransparent and transValue or 0 end
+            -- if searchBar then searchBar.BackgroundTransparency = isTransparent and transValue or 0 end -- [[ PERUBAHAN ]] Dihapus
             if scrollFrame then scrollFrame.BackgroundTransparency = isTransparent and transValue or 0 end
             if resizeHandle then resizeHandle.BackgroundTransparency = isTransparent and 0.9 or 0.5 end
 
@@ -1446,6 +1405,41 @@ task.spawn(function()
         if processed then return end; if input.KeyCode == Enum.KeyCode.F and not UserInputService.TouchEnabled then if not IsFlying then StartFly() else StopFly() end end 
     end)
     
+    -- ## PERBAIKAN ANIMASI: Fungsi global untuk menerapkan semua animasi yang tersimpan
+    local function applyAllAnimations(character)
+        if not character or not next(lastAnimations) then return end
+        
+        local animateScript = character:WaitForChild("Animate", 10)
+        if not animateScript then 
+            warn("ArexansTools: Gagal menerapkan animasi, script 'Animate' tidak ditemukan.")
+            return
+        end
+        
+        task.wait(0.5) -- Beri waktu tambahan agar script Animate bisa inisialisasi
+        
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if not humanoid then return end
+
+        pcall(function()
+            local Anim = animateScript
+            humanoid.PlatformStand = true
+            task.wait(0.1)
+
+            if lastAnimations.Idle then Anim.idle.Animation1.AnimationId, Anim.idle.Animation2.AnimationId = "http://www.roblox.com/asset/?id="..lastAnimations.Idle[1], "http://www.roblox.com/asset/?id="..lastAnimations.Idle[2] end
+            if lastAnimations.Walk then Anim.walk.WalkAnim.AnimationId = "http://www.roblox.com/asset/?id="..lastAnimations.Walk end
+            if lastAnimations.Run then Anim.run.RunAnim.AnimationId = "http://www.roblox.com/asset/?id="..lastAnimations.Run end
+            if lastAnimations.Jump then Anim.jump.JumpAnim.AnimationId = "http://www.roblox.com/asset/?id="..lastAnimations.Jump end
+            if lastAnimations.Fall then Anim.fall.FallAnim.AnimationId = "http://www.roblox.com/asset/?id="..lastAnimations.Fall end
+            if lastAnimations.Swim and Anim.swim then Anim.swim.Swim.AnimationId = "http://www.roblox.com/asset/?id="..lastAnimations.Swim end
+            if lastAnimations.SwimIdle and Anim.swimidle then Anim.swimidle.SwimIdle.AnimationId = "http://www.roblox.com/asset/?id="..lastAnimations.SwimIdle end
+            if lastAnimations.Climb then Anim.climb.ClimbAnim.AnimationId = "http://www.roblox.com/asset/?id="..lastAnimations.Climb end
+
+            task.wait(0.1)
+            humanoid.PlatformStand = false
+            humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+        end)
+    end
+    
     -- [[ PERBAIKAN ANTI-RESET SAAT RESPAWN ]]
     -- Fungsi ini akan menerapkan kembali semua fitur yang aktif ke karakter baru Anda.
     local function reapplyFeaturesOnRespawn(character)
@@ -1498,12 +1492,16 @@ task.spawn(function()
                 StartFly()
             end
         end
+
+        -- ## PERBAIKAN ANIMASI: Panggil fungsi untuk menerapkan animasi
+        applyAllAnimations(character)
     end
     
     -- Sambungkan fungsi di atas ke event CharacterAdded
     LocalPlayer.CharacterAdded:Connect(reapplyFeaturesOnRespawn)
 
     -- INISIALISASI
+    loadAnimations() -- ## PERBAIKAN ANIMASI: Muat animasi saat skrip dimulai
     loadTeleportData()
     loadGuiPositions()
     switchTab("Player")
@@ -1513,4 +1511,3 @@ task.spawn(function()
         reapplyFeaturesOnRespawn(LocalPlayer.Character)
     end
 end)
-
