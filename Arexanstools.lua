@@ -1,3 +1,30 @@
+--[[
+    ===============================================================================================================
+    == PENTING: AGAR SKRIP KEMBALI SETELAH PINDAH SERVER (HOP SERVER)                                             ==
+    ===============================================================================================================
+    
+    Metode ini TIDAK memerlukan folder auto-execute, tetapi memerlukan Anda untuk melakukan setup satu kali.
+
+    CARA SETUP:
+    1. Salin SELURUH kode dari file ini.
+    2. Buka situs seperti https://pastebin.com atau https://gist.github.com.
+    3. Tempel kode yang sudah Anda salin dan buat sebuah 'paste' baru.
+    4. Dapatkan URL "RAW" dari paste tersebut. 
+       - Di Pastebin, biasanya ada tombol "raw".
+       - Di GitHub Gist, ada tombol "Raw".
+    5. GANTI nilai variabel SCRIPT_URL di bawah ini dengan URL raw yang Anda dapatkan.
+
+    Setelah setup, skrip ini akan secara otomatis menjadwalkan dirinya untuk dieksekusi kembali setiap kali 
+    Anda menggunakan tombol "Hop Server", selama executor Anda mendukung fungsi `queue_on_teleport`.
+]]
+
+local SCRIPT_URL = "https://raw.githubusercontent.com/AREXANS/emoteff/refs/heads/main/Arexanstools.lua" -- << WAJIB DIISI!
+
+-- Mencegah GUI dibuat berulang kali jika skrip dieksekusi lebih dari sekali tanpa me-refresh game.
+if game:GetService("CoreGui"):FindFirstChild("ArexansToolsGUI") then
+    game:GetService("CoreGui"):FindFirstChild("ArexansToolsGUI"):Destroy()
+end
+
 task.spawn(function()
     -- Layanan dan Variabel Global
     local Players = game:GetService("Players")
@@ -10,6 +37,7 @@ task.spawn(function()
     local TweenService = game:GetService("TweenService")
     local Lighting = game:GetService("Lighting")
     local MaterialService = game:GetService("MaterialService")
+    local TeleportService = game:GetService("TeleportService")
     
     -- Pengaturan Default
     local Settings = {
@@ -50,6 +78,7 @@ task.spawn(function()
     local isMiniToggleDraggable = true 
     local IsAntiLagEnabled = false 
     local antiLagConnection = nil 
+    local IsInvisibilityEnabled = false -- Variabel baru untuk fitur invisible
     
     local isEmoteToggleDraggable = true
     local isAnimationToggleDraggable = true
@@ -64,6 +93,13 @@ task.spawn(function()
     -- BARU: Variabel untuk menyimpan posisi GUI
     local GUI_POSITIONS_SAVE_FILE = "ArexansTools_GuiPositions_" .. tostring(game.PlaceId) .. ".json"
     local loadedGuiPositions = nil
+    
+    -- [[ PERBAIKAN HOP SERVER ]] --
+    -- Variabel untuk menyimpan status fitur
+    local FEATURE_STATES_SAVE_FILE = "ArexansTools_FeatureStates_" .. tostring(game.PlaceId) .. ".json"
+    
+    -- Variabel untuk menyimpan data original karakter saat invisible
+    local originalCharacterAppearance = {}
 
     -- Variabel AntiFling
     local antifling_velocity_threshold = 85
@@ -382,6 +418,8 @@ task.spawn(function()
     -- ====================================================================
     -- == BAGIAN TELEPORT DAN FUNGSI UTILITAS                          ==
     -- ====================================================================
+    local saveFeatureStates -- Deklarasi awal agar bisa diakses
+    local saveGuiPositions -- Deklarasi awal
     
     local function naturalCompare(a, b)
         local function split(s)
@@ -400,9 +438,9 @@ task.spawn(function()
     end
     
     -- BARU: Fungsi untuk menyimpan dan memuat posisi GUI
-    local function saveGuiPositions()
+    saveGuiPositions = function()
         if not writefile then
-            showNotification("Executor tidak mendukung penyimpanan file.", Color3.fromRGB(200, 50, 50))
+            -- showNotification("Executor tidak mendukung penyimpanan file.", Color3.fromRGB(200, 50, 50))
             return
         end
     
@@ -439,10 +477,10 @@ task.spawn(function()
         end)
     
         if success then
-            showNotification("Posisi UI berhasil disimpan!", Color3.fromRGB(50, 200, 50))
+            -- showNotification("Posisi UI berhasil disimpan!", Color3.fromRGB(50, 200, 50))
         else
             warn("Gagal menyimpan posisi GUI:", result)
-            showNotification("Gagal menyimpan posisi UI.", Color3.fromRGB(200, 50, 50))
+            -- showNotification("Gagal menyimpan posisi UI.", Color3.fromRGB(200, 50, 50))
         end
     end
     
@@ -499,6 +537,67 @@ task.spawn(function()
             end
         end
     end
+
+    -- [[ PERBAIKAN HOP SERVER ]] --
+    saveFeatureStates = function()
+        if not writefile then return end
+        
+        local statesToSave = {
+            WalkSpeed = IsWalkSpeedEnabled,
+            Fly = IsFlying,
+            Noclip = IsNoclipEnabled,
+            InfinityJump = IsInfinityJumpEnabled,
+            GodMode = IsGodModeEnabled,
+            AntiFling = antifling_enabled,
+            AntiLag = IsAntiLagEnabled,
+            Invisible = IsInvisibilityEnabled,
+            KillAura = IsKillAuraEnabled,
+            Aimbot = IsAimbotEnabled,
+            -- Simpan juga nilai slider
+            WalkSpeedValue = Settings.WalkSpeed,
+            FlySpeedValue = Settings.FlySpeed,
+            KillAuraRadiusValue = Settings.KillAuraRadius,
+            KillAuraDamageValue = Settings.KillAuraDamage,
+            AimbotFOVValue = Settings.AimbotFOV
+        }
+        
+        pcall(function()
+            writefile(FEATURE_STATES_SAVE_FILE, HttpService:JSONEncode(statesToSave))
+        end)
+    end
+    
+    local function loadFeatureStates()
+        if not readfile or not isfile or not isfile(FEATURE_STATES_SAVE_FILE) then return end
+        
+        local success, result = pcall(function()
+            local fileContent = readfile(FEATURE_STATES_SAVE_FILE)
+            local decodedData = HttpService:JSONDecode(fileContent)
+            
+            if type(decodedData) == "table" then
+                IsWalkSpeedEnabled = decodedData.WalkSpeed or false
+                IsFlying = decodedData.Fly or false
+                IsNoclipEnabled = decodedData.Noclip or false
+                IsInfinityJumpEnabled = decodedData.InfinityJump or false
+                IsGodModeEnabled = decodedData.GodMode or false
+                antifling_enabled = decodedData.AntiFling or false
+                IsAntiLagEnabled = decodedData.AntiLag or false
+                IsInvisibilityEnabled = decodedData.Invisible or false
+                IsKillAuraEnabled = decodedData.KillAura or false
+                IsAimbotEnabled = decodedData.Aimbot or false
+                
+                -- Muat juga nilai slider
+                Settings.WalkSpeed = decodedData.WalkSpeedValue or 16
+                Settings.FlySpeed = decodedData.FlySpeedValue or 1
+                Settings.KillAuraRadius = decodedData.KillAuraRadiusValue or 25
+                Settings.KillAuraDamage = decodedData.KillAuraDamageValue or 10
+                Settings.AimbotFOV = decodedData.AimbotFOVValue or 90
+            end
+        end)
+        if not success then
+            warn("Gagal memuat status fitur:", result)
+        end
+    end
+
 
     local function showRenamePrompt(locationIndex, callback)
         local oldName = savedTeleportLocations[locationIndex].Name
@@ -932,163 +1031,168 @@ task.spawn(function()
             resizeHandle.BorderSizePixel = 0
             resizeHandle.ZIndex = 2
             
-            local buttons = {}
-            local function createTheButton(text, callback)
-                local button = Instance.new("TextButton", scrollFrame)
-                button.Text = text
-                button.Font = Enum.Font.SourceSans
-                button.TextScaled = false 
-                button.TextSize = 10 
-                button.TextColor3 = Color3.fromRGB(255, 255, 255)
-                button.BackgroundColor3 = Color3.fromRGB(0, 120, 255)
-                button.Size = UDim2.new(1, 0, 0, 25) 
-                button.Position = UDim2.new(1, 0, 0, #buttons * 30) 
-                button.BackgroundTransparency = 1
-                button.BorderSizePixel = 0
-                button.MouseButton1Click:Connect(callback)
-                local tweenInfo = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-                local targetTransparency = isAnimationTransparent and 0.85 or 0.3
-                local goal = {Position = UDim2.new(0, 0, 0, #buttons * 30), BackgroundTransparency = targetTransparency} 
-                TweenService:Create(button, tweenInfo, goal):Play()
-                table.insert(buttons, button)
-                scrollFrame.CanvasSize = UDim2.new(0, 0, 0, #buttons * 30)
-            end
+            -- [[ PERBAIKAN DELAY ]]
+            -- Memindahkan semua proses pembuatan tombol dan logika animasi ke thread baru
+            -- agar tidak memblokir UI utama. Ini akan membuat ikon muncul seketika.
+            task.spawn(function()
+                local buttons = {}
+                local function createTheButton(text, callback)
+                    local button = Instance.new("TextButton", scrollFrame)
+                    button.Text = text
+                    button.Font = Enum.Font.SourceSans
+                    button.TextScaled = false 
+                    button.TextSize = 10 
+                    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    button.BackgroundColor3 = Color3.fromRGB(0, 120, 255)
+                    button.Size = UDim2.new(1, 0, 0, 25) 
+                    button.Position = UDim2.new(1, 0, 0, #buttons * 30) 
+                    button.BackgroundTransparency = 1
+                    button.BorderSizePixel = 0
+                    button.MouseButton1Click:Connect(callback)
+                    local tweenInfo = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+                    local targetTransparency = isAnimationTransparent and 0.85 or 0.3
+                    local goal = {Position = UDim2.new(0, 0, 0, #buttons * 30), BackgroundTransparency = targetTransparency} 
+                    TweenService:Create(button, tweenInfo, goal):Play()
+                    table.insert(buttons, button)
+                    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, #buttons * 30)
+                end
 
-            searchBar:GetPropertyChangedSignal("Text"):Connect(function()
-                local searchText = searchBar.Text:lower()
-                local order = 0
-                for _, button in ipairs(buttons) do
-                    if searchText == "" or button.Text:lower():find(searchText) then
-                        button.Visible = true
-                        button.Position = UDim2.new(0, 0, 0, order * 30) 
-                        order = order + 1
-                    else
-                        button.Visible = false
+                searchBar:GetPropertyChangedSignal("Text"):Connect(function()
+                    local searchText = searchBar.Text:lower()
+                    local order = 0
+                    for _, button in ipairs(buttons) do
+                        if searchText == "" or button.Text:lower():find(searchText) then
+                            button.Visible = true
+                            button.Position = UDim2.new(0, 0, 0, order * 30) 
+                            order = order + 1
+                        else
+                            button.Visible = false
+                        end
                     end
-                end
-                scrollFrame.CanvasSize = UDim2.new(0, 0, 0, order * 30)
-            end)
-            
-            local isResizing = false
-            local initialMousePosition, initialFrameSize
-            resizeHandle.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then isResizing = true; initialMousePosition = UserInputService:GetMouseLocation(); initialFrameSize = frame.AbsoluteSize; end end)
-            UserInputService.InputChanged:Connect(function(input) if isResizing and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then local delta = UserInputService:GetMouseLocation() - initialMousePosition; local newSizeX = math.max(100, initialFrameSize.X + delta.X); local newSizeY = math.max(100, initialFrameSize.Y + delta.Y); frame.Size = UDim2.new(0, newSizeX, 0, newSizeY); frame.Position = UDim2.new(frame.Position.X.Scale, frame.Position.X.Offset, frame.Position.Y.Scale, frame.Position.Y.Offset) end end)
-            UserInputService.InputEnded:Connect(function(input) if isResizing and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then isResizing = false; end end)
-            
-            local speaker = Players.LocalPlayer
-
-            local function StopAnim()
-                local char = speaker.Character; if not char then return end
-                local Hum = char:FindFirstChildOfClass("Humanoid") or char:FindFirstChildOfClass("AnimationController"); if not Hum then return end
-                for _, v in next, Hum:GetPlayingAnimationTracks() do v:Stop() end
-            end
-
-            local function refresh()
-                local char = speaker.Character; if not char then return end
-                local humanoid = char:WaitForChild("Humanoid"); if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.GettingUp) end
-            end
-
-            local function refreshswim()
-                local char = speaker.Character; if not char then return end
-                local humanoid = char:WaitForChild("Humanoid"); if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.GettingUp); task.wait(0.1); humanoid:ChangeState(Enum.HumanoidStateType.Swimming) end
-            end
-
-            local function refreshclimb()
-                local char = speaker.Character; if not char then return end
-                local humanoid = char:WaitForChild("Humanoid"); if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.GettingUp); task.wait(0.1); humanoid:ChangeState(Enum.HumanoidStateType.Climbing) end
-            end
-
-            local Animations = {
-                Idle={["2016 Animation (mm2)"]={"387947158","387947464"},["Oh Really?"]={"98004748982532","98004748982532"},Astronaut={"891621366","891633237"},["Adidas Community"]={"122257458498464","102357151005774"},Bold={"16738333868","16738334710"},Sans={"123627677663418","123627677663418"},Sans2={"113203077347750","113203077347750"},Magician={"139433213852503","139433213852503"},["John Doe"]={"72526127498800","72526127498800"},Noli={"139360856809483","139360856809483"},Coolkid={"95203125292023","95203125292023"},["Survivor Injured"]={"73905365652295","73905365652295"},["1x1x1x1"]={"76780522821306","76780522821306"},Borock={"3293641938","3293642554"},Kaneki={"133277876379233","133277876379233"},Bubbly={"910004836","910009958"},Cartoony={"742637544","742638445"},Confident={"1069977950","1069987858"},["Catwalk Glam"]={"133806214992291","94970088341563"},Cowboy={"1014390418","1014398616"},["Drooling Zombie"]={"3489171152","3489171152"},Elder={"10921101664","10921102574"},Ghost={"616006778","616008087"},Knight={"657595757","657568135"},Levitation={"616006778","616008087"},Mage={"707742142","707855907"},MrToilet={"4417977954","4417978624"},Ninja={"656117400","656118341"},NFL={"92080889861410","74451233229259"},OldSchool={"10921230744","10921232093"},Patrol={"1149612882","1150842221"},Pirate={"750781874","750782770"},["Default Retarget"]={"95884606664820","95884606664820"},["Very Long"]={"18307781743","18307781743"},Sway={"560832030","560833564"},Popstar={"1212900985","1150842221"},Princess={"941003647","941013098"},R6={"12521158637","12521162526"},["R15 Reanimated"]={"4211217646","4211218409"},Realistic={"17172918855","17173014241"},Robot={"616088211","616089559"},Sneaky={"1132473842","1132477671"},["Sports (Adidas)"]={"18537376492","18537371272"},Soldier={"3972151362","3972151362"},Stylish={"616136790","616138447"},["Stylized Female"]={"4708191566","4708192150"},Superhero={"10921288909","10921290167"},Toy={"782841498","782845736"},Udzal={"3303162274","3303162549"},Vampire={"1083445855","1083450166"},Werewolf={"1083195517","1083214717"},["Wicked (Popular)"]={"118832222982049","76049494037641"},["No Boundaries (Walmart)"]={"18747067405","18747063918"},Zombie={"616158929","616160636"}},
-                Walk={Gojo="95643163365384",Geto="85811471336028",Astronaut="891667138",["Adidas Community"]="122150855457006",Bold="16738340646",Bubbly="910034870",Smooth="76630051272791",Cartoony="742640026",Confident="1070017263",Cowboy="1014421541",["Catwalk Glam"]="109168724482748",["Drooling Zombie"]="3489174223",Elder="10921111375",Ghost="616013216",Knight="10921127095",Levitation="616013216",Mage="707897309",Ninja="656121766",NFL="110358958299415",OldSchool="10921244891",Patrol="1151231493",Pirate="750785693",["Default Retarget"]="115825677624788",Popstar="1212980338",Princess="941028902",R6="12518152696",["R15 Reanimated"]="4211223236",["2016 Animation (mm2)"]="387947975",Robot="616095330",Sneaky="1132510133",["Sports (Adidas)"]="18537392113",Stylish="616146177",["Stylized Female"]="4708193840",Superhero="10921298616",Toy="782843345",Udzal="3303162967",Vampire="1083473930",Werewolf="1083178339",["Wicked (Popular)"]="92072849924640",["No Boundaries (Walmart)"]="18747074203",Zombie="616168032"},
-                Run={["2016 Animation (mm2)"]="387947975",Soccer="116881956670910",["Adidas Community"]="82598234841035",Astronaut="10921039308",Naruto="104074120169874",Bold="16738337225",Bubbly="10921057244",Cartoony="10921076136",Dog="130072963359721",Confident="1070001516",Lagging="71095688469567",Cowboy="1014401683",["Catwalk Glam"]="81024476153754",["Drooling Zombie"]="3489173414",Elder="10921104374",Ghost="616013216",["Heavy Run (Udzal / Borock)"]="3236836670",Knight="10921121197",Levitation="616010382",Mage="10921148209",MrToilet="4417979645",Ninja="656118852",NFL="117333533048078",OldSchool="10921240218",Patrol="1150967949",Pirate="750783738",["Default Retarget"]="102294264237491",Popstar="1212980348",Princess="941015281",R6="12518152696",["R15 Reanimated"]="4211220381",Robot="10921250460",Sneaky="1132494274",["Sports (Adidas)"]="18537384940",Stylish="10921276116",["Stylized Female"]="4708192705",Superhero="10921291831",Toy="10921306285",Vampire="10921320299",Werewolf="10921336997",["Wicked (Popular)"]="72301599441680",["No Boundaries (Walmart)"]="18747070484",Zombie="616163682"},
-                Jump={Astronaut="891627522",["Adidas Community"]="656117878",Bold="16738336650",Bubbly="910016857",Cartoony="742637942",["Catwalk Glam"]="116936326516985",Confident="1069984524",Cowboy="1014394726",Elder="10921107367",Ghost="616008936",Knight="910016857",Levitation="616008936",Mage="10921149743",Ninja="656117878",NFL="119846112151352",OldSchool="10921242013",Patrol="1148811837",Pirate="750782230",["Default Retarget"]="117150377950987",Popstar="1212954642",Princess="941008832",Robot="616090535",["R15 Reanimated"]="4211219390",R6="12520880485",Sneaky="1132489853",["Sports (Adidas)"]="18537380791",Stylish="616139451",["Stylized Female"]="4708188025",Superhero="10921294559",Toy="10921308158",Vampire="1083455352",Werewolf="1083218792",["Wicked (Popular)"]="104325245285198",["No Boundaries (Walmart)"]="18747069148",Zombie="616161997"},
-                Fall={Astronaut="891617961",["Adidas Community"]="98600215928904",Bold="16738333171",Bubbly="910001910",Cartoony="742637151",["Catwalk Glam"]="92294537340807",Confident="1069973677",Cowboy="1014384571",Elder="10921105765",Knight="10921122579",Levitation="616005863",Mage="707829716",Ninja="656115606",NFL="129773241321032",OldSchool="10921241244",Patrol="1148863382",Pirate="750780242",["Default Retarget"]="110205622518029",Popstar="1212900995",Princess="941000007",Robot="616087089",["R15 Reanimated"]="4211216152",R6="12520972571",Sneaky="1132469004",["Sports (Adidas)"]="18537367238",Stylish="616134815",["Stylized Female"]="4708186162",Superhero="10921293373",Toy="782846423",Vampire="1083443587",Werewolf="1083189019",["Wicked (Popular)"]="121152442762481",["No Boundaries (Walmart)"]="18747062535",Zombie="616157476"},
-                SwimIdle={Astronaut="891663592",["Adidas Community"]="109346520324160",Bold="16738339817",Bubbly="910030921",Cartoony="10921079380",["Catwalk Glam"]="98854111361360",Confident="1070012133",CowBoy="1014411816",Elder="10921110146",Mage="707894699",Ninja="656118341",NFL="79090109939093",Patrol="1151221899",Knight="10921125935",OldSchool="10921244018",Levitation="10921139478",Popstar="1212998578",Princess="941025398",Pirate="750785176",R6="12518152696",Robot="10921253767",Sneaky="1132506407",["Sports (Adidas)"]="18537387180",Stylish="10921281964",Stylized="4708190607",SuperHero="10921297391",Toy="10921310341",Vampire="10921325443",Werewolf="10921341319",["Wicked (Popular)"]="113199415118199",["No Boundaries (Walmart)"]="18747071682"},
-                Swim={Astronaut="891663592",["Adidas Community"]="133308483266208",Bubbly="910028158",Bold="16738339158",Cartoony="10921079380",["Catwalk Glam"]="134591743181628",CowBoy="1014406523",Confident="1070009914",Elder="10921108971",Knight="10921125160",Mage="707876443",NFL="132697394189921",OldSchool="10921243048",PopStar="1212998578",Princess="941018893",Pirate="750784579",Patrol="1151204998",R6="12518152696",Robot="10921253142",Levitation="10921138209",Stylish="10921281000",SuperHero="10921295495",Sneaky="1132500520",["Sports (Adidas)"]="18537389531",Toy="10921309319",Vampire="10921324408",Werewolf="10921340419",["Wicked (Popular)"]="99384245425157",["No Boundaries (Walmart)"]="18747073181",Zombie="616165109"},
-                Climb={Astronaut="10921032124",["Adidas Community"]="88763136693023",Bold="16738332169",Cartoony="742636889",["Catwalk Glam"]="119377220967554",Confident="1069946257",CowBoy="1014380606",Elder="845392038",Ghost="616003713",Knight="10921125160",Levitation="10921132092",Mage="707826056",Ninja="656114359",NFL="134630013742019",OldSchool="10921229866",Patrol="1148811837",Popstar="1213044953",Princess="940996062",R6="12520982150",["Reanimated R15"]="4211214992",Robot="616086039",Sneaky="1132461372",["Sports (Adidas)"]="18537363391",Stylish="10921271391",["Stylized Female"]="4708184253",SuperHero="10921286911",Toy="10921300839",Vampire="1083439238",WereWolf="10921329322",["Wicked (Popular)"]="131326830509784",["No Boundaries (Walmart)"]="18747060903",Zombie="616156119"}}
-            
-            local function loadAnimation(animationId) local char = speaker.Character or speaker.CharacterAdded:Wait(); local anim = Instance.new("Animation"); anim.AnimationId = "rbxassetid://"..tostring(animationId); return char:WaitForChild("Humanoid"):LoadAnimation(anim) end
-            for _, sets in pairs(Animations) do for _, ids in pairs(sets) do if type(ids)=="table" then for _, id in ipairs(ids) do task.spawn(loadAnimation, id) end else task.spawn(loadAnimation, ids) end end end
-
-            local function Buy(gamePassID)
-                pcall(function() game:GetService("MarketplaceService"):PromptGamePassPurchase(speaker, gamePassID) end)
-            end
-
-            local function ResetIdle() pcall(function() StopAnim(); local anim = speaker.Character.Animate; anim.idle.Animation1.AnimationId, anim.idle.Animation2.AnimationId = "http://www.roblox.com/asset/?id=0", "http://www.roblox.com/asset/?id=0" end) end
-            local function ResetWalk() pcall(function() StopAnim(); speaker.Character.Animate.walk.WalkAnim.AnimationId = "http://www.roblox.com/asset/?id=0" end) end
-            local function ResetRun() pcall(function() StopAnim(); task.wait(0.1); speaker.Character.Animate.run.RunAnim.AnimationId = "http://www.roblox.com/asset/?id=0" end) end
-            local function ResetJump() pcall(function() StopAnim(); task.wait(0.1); speaker.Character.Animate.jump.JumpAnim.AnimationId = "http://www.roblox.com/asset/?id=0" end) end
-            local function ResetFall() pcall(function() StopAnim(); speaker.Character.Animate.fall.FallAnim.AnimationId = "http://www.roblox.com/asset/?id=0" end) end
-            local function ResetSwim() pcall(function() StopAnim(); local anim = speaker.Character.Animate; if anim.swim then anim.swim.Swim.AnimationId = "http://www.roblox.com/asset/?id=0" end end) end
-            local function ResetSwimIdle() pcall(function() StopAnim(); local anim = speaker.Character.Animate; if anim.swimidle then anim.swimidle.SwimIdle.AnimationId = "http://www.roblox.com/asset/?id=0" end end) end
-            local function ResetClimb() pcall(function() StopAnim(); speaker.Character.Animate.climb.ClimbAnim.AnimationId = "http://www.roblox.com/asset/?id=0" end) end
-            
-            local function setAnimation(animationType, animationId)
-                -- ## PERBAIKAN ANIMASI: Fungsi untuk menyimpan animasi ke file global
-                local function saveLastAnimations() 
-                    if writefile then 
-                        pcall(function() 
-                            local data = HttpService:JSONEncode(lastAnimations)
-                            writefile(ANIMATION_SAVE_FILE, data) 
-                        end) 
-                    end 
-                end
-                local char = speaker.Character; if not char then return end
-                local Anim = char:FindFirstChild("Animate"); if not Anim then return end
-                local humanoid = char:WaitForChild("Humanoid"); humanoid.PlatformStand = true; task.wait(0.1)
+                    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, order * 30)
+                end)
                 
-                if animationType == "Idle" then lastAnimations.Idle = animationId; ResetIdle(); Anim.idle.Animation1.AnimationId, Anim.idle.Animation2.AnimationId = "http://www.roblox.com/asset/?id="..animationId[1], "http://www.roblox.com/asset/?id="..animationId[2]; refresh()
-                elseif animationType == "Walk" then lastAnimations.Walk = animationId; ResetWalk(); Anim.walk.WalkAnim.AnimationId = "http://www.roblox.com/asset/?id="..animationId; refresh()
-                elseif animationType == "Run" then lastAnimations.Run = animationId; ResetRun(); Anim.run.RunAnim.AnimationId = "http://www.roblox.com/asset/?id="..animationId; refresh()
-                elseif animationType == "Jump" then lastAnimations.Jump = animationId; ResetJump(); Anim.jump.JumpAnim.AnimationId = "http://www.roblox.com/asset/?id="..animationId; refresh()
-                elseif animationType == "Fall" then lastAnimations.Fall = animationId; ResetFall(); Anim.fall.FallAnim.AnimationId = "http://www.roblox.com/asset/?id="..animationId; refresh()
-                elseif animationType == "Swim" and Anim.swim then lastAnimations.Swim = animationId; ResetSwim(); Anim.swim.Swim.AnimationId = "http://www.roblox.com/asset/?id="..animationId; refreshswim()
-                elseif animationType == "SwimIdle" and Anim.swimidle then lastAnimations.SwimIdle = animationId; ResetSwimIdle(); Anim.swimidle.SwimIdle.AnimationId = "http://www.roblox.com/asset/?id="..animationId; refreshswim()
-                elseif animationType == "Climb" then lastAnimations.Climb = animationId; ResetClimb(); Anim.climb.ClimbAnim.AnimationId = "http://www.roblox.com/asset/?id="..animationId; refreshclimb() end
-                saveLastAnimations(); task.wait(0.1); humanoid.PlatformStand = false
-            end
-            
-            -- Hapus fungsi loadLastAnimations lokal, karena sudah ada di global
-            
-            local function PlayEmote(animationId) StopAnim(); local track = loadAnimation(animationId); track:Play(); local conn; conn = RunService.RenderStepped:Connect(function() if speaker.Character:WaitForChild("Humanoid").MoveDirection.Magnitude > 0 then track:Stop(); conn:Disconnect() end end) end
-            local function ZeroPlayEmote(animationId) StopAnim(); local track = loadAnimation(animationId); track:Play(); track:AdjustSpeed(0); local conn; conn = RunService.RenderStepped:Connect(function() if speaker.Character:WaitForChild("Humanoid").MoveDirection.Magnitude > 0 then track:Stop(); conn:Disconnect() end end) end
-            local function FPlayEmote(animationId) StopAnim(); local track = loadAnimation(animationId); track:Play(); task.delay(track.Length * 0.9, function() track:AdjustSpeed(0) end); local conn; conn = RunService.RenderStepped:Connect(function() if speaker.Character:WaitForChild("Humanoid").MoveDirection.Magnitude > 0 then track:Stop(); conn:Disconnect() end end) end
-            
-            local function AddEmote(name, id) createTheButton(name.." - Emote", function() PlayEmote(id) end) end
-            local function ZeroAddEmote(name, id) createTheButton(name.." - Emote", function() ZeroPlayEmote(id) end) end
-            local function AddFEmote(name, id) createTheButton(name.." - Emote", function() FPlayEmote(id) end) end
-            local function AddDonate(Price, Id) createTheButton("Donate "..Price.." Robux", function() Buy(Id) end) end
-            local function createAnimationButton(text, animType, animId) createTheButton(text.." - "..animType, function() setAnimation(animType, animId) end) end
-            
-            local function resetToAdidasSport()
-                local anims = Animations
-                if anims.Walk["Sports (Adidas)"] then setAnimation("Walk", anims.Walk["Sports (Adidas)"]) end
-                if anims.Run["Sports (Adidas)"] then setAnimation("Run", anims.Run["Sports (Adidas)"]) end
-                if anims.Jump["Sports (Adidas)"] then setAnimation("Jump", anims.Jump["Sports (Adidas)"]) end
-                if anims.Fall["Sports (Adidas)"] then setAnimation("Fall", anims.Fall["Sports (Adidas)"]) end
-                if anims.Swim["Sports (Adidas)"] then setAnimation("Swim", anims.Swim["Sports (Adidas)"]) end
-                if anims.SwimIdle["Sports (Adidas)"] then setAnimation("SwimIdle", anims.SwimIdle["Sports (Adidas)"]) end
-                if anims.Climb["Sports (Adidas)"] then setAnimation("Climb", anims.Climb["Sports (Adidas)"]) end
-            end
-            createTheButton("Reset to Adidas Sport", resetToAdidasSport)
-            
-            for name, ids in pairs(Animations.Idle) do task.wait(); createAnimationButton(name, "Idle", ids) end
-            for name, id in pairs(Animations.Walk) do task.wait(); createAnimationButton(name, "Walk", id) end
-            for name, id in pairs(Animations.Run) do task.wait(); createAnimationButton(name, "Run", id) end
-            for name, id in pairs(Animations.Jump) do task.wait(); createAnimationButton(name, "Jump", id) end
-            for name, id in pairs(Animations.Fall) do task.wait(); createAnimationButton(name, "Fall", id) end
-            for name, id in pairs(Animations.SwimIdle) do task.wait(); createAnimationButton(name, "SwimIdle", id) end
-            for name, id in pairs(Animations.Swim) do task.wait(); createAnimationButton(name, "Swim", id) end
-            for name, id in pairs(Animations.Climb) do task.wait(); createAnimationButton(name, "Climb", id) end
+                local isResizing = false
+                local initialMousePosition, initialFrameSize
+                resizeHandle.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then isResizing = true; initialMousePosition = UserInputService:GetMouseLocation(); initialFrameSize = frame.AbsoluteSize; end end)
+                UserInputService.InputChanged:Connect(function(input) if isResizing and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then local delta = UserInputService:GetMouseLocation() - initialMousePosition; local newSizeX = math.max(100, initialFrameSize.X + delta.X); local newSizeY = math.max(100, initialFrameSize.Y + delta.Y); frame.Size = UDim2.new(0, newSizeX, 0, newSizeY); frame.Position = UDim2.new(frame.Position.X.Scale, frame.Position.X.Offset, frame.Position.Y.Scale, frame.Position.Y.Offset) end end)
+                UserInputService.InputEnded:Connect(function(input) if isResizing and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then isResizing = false; end end)
+                
+                local speaker = Players.LocalPlayer
 
-            -- ## PERBAIKAN ANIMASI: Hapus CharacterAdded lokal, akan ditangani secara global
-            -- speaker.CharacterAdded:Connect(...) DIHAPUS DARI SINI
-            
-            AddDonate(20, 1131371530); AddDonate(200, 1131065702); AddDonate(183, 1129915318); AddDonate(2000, 1128299749)
-            AddEmote("Dance 1", 12521009666); AddEmote("Dance 2", 12521169800); AddEmote("Dance 3", 12521178362); AddEmote("Cheer", 12521021991); AddEmote("Laugh", 12521018724); AddEmote("Point", 12521007694); AddEmote("Wave", 12521004586)
-            AddFEmote("Soldier - Assault Fire", 4713811763); AddEmote("Soldier - Assault Aim", 4713633512); AddEmote("Zombie - Attack", 3489169607); AddFEmote("Zombie - Death", 3716468774); AddEmote("Roblox - Sleep", 2695918332); AddEmote("Roblox - Quake", 2917204509); AddEmote("Roblox - Rifle Reload", 3972131105)
-            ZeroAddEmote("Accurate T Pose", 2516930867)
+                local function StopAnim()
+                    local char = speaker.Character; if not char then return end
+                    local Hum = char:FindFirstChildOfClass("Humanoid") or char:FindFirstChildOfClass("AnimationController"); if not Hum then return end
+                    for _, v in next, Hum:GetPlayingAnimationTracks() do v:Stop() end
+                end
+
+                local function refresh()
+                    local char = speaker.Character; if not char then return end
+                    local humanoid = char:WaitForChild("Humanoid"); if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.GettingUp) end
+                end
+
+                local function refreshswim()
+                    local char = speaker.Character; if not char then return end
+                    local humanoid = char:WaitForChild("Humanoid"); if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.GettingUp); task.wait(0.1); humanoid:ChangeState(Enum.HumanoidStateType.Swimming) end
+                end
+
+                local function refreshclimb()
+                    local char = speaker.Character; if not char then return end
+                    local humanoid = char:WaitForChild("Humanoid"); if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.GettingUp); task.wait(0.1); humanoid:ChangeState(Enum.HumanoidStateType.Climbing) end
+                end
+
+                local Animations = {
+                    Idle={["2016 Animation (mm2)"]={"387947158","387947464"},["Oh Really?"]={"98004748982532","98004748982532"},Astronaut={"891621366","891633237"},["Adidas Community"]={"122257458498464","102357151005774"},Bold={"16738333868","16738334710"},Sans={"123627677663418","123627677663418"},Sans2={"113203077347750","113203077347750"},Magician={"139433213852503","139433213852503"},["John Doe"]={"72526127498800","72526127498800"},Noli={"139360856809483","139360856809483"},Coolkid={"95203125292023","95203125292023"},["Survivor Injured"]={"73905365652295","73905365652295"},["1x1x1x1"]={"76780522821306","76780522821306"},Borock={"3293641938","3293642554"},Kaneki={"133277876379233","133277876379233"},Bubbly={"910004836","910009958"},Cartoony={"742637544","742638445"},Confident={"1069977950","1069987858"},["Catwalk Glam"]={"133806214992291","94970088341563"},Cowboy={"1014390418","1014398616"},["Drooling Zombie"]={"3489171152","3489171152"},Elder={"10921101664","10921102574"},Ghost={"616006778","616008087"},Knight={"657595757","657568135"},Levitation={"616006778","616008087"},Mage={"707742142","707855907"},MrToilet={"4417977954","4417978624"},Ninja={"656117400","656118341"},NFL={"92080889861410","74451233229259"},OldSchool={"10921230744","10921232093"},Patrol={"1149612882","1150842221"},Pirate={"750781874","750782770"},["Default Retarget"]={"95884606664820","95884606664820"},["Very Long"]={"18307781743","18307781743"},Sway={"560832030","560833564"},Popstar={"1212900985","1150842221"},Princess={"941003647","941013098"},R6={"12521158637","12521162526"},["R15 Reanimated"]={"4211217646","4211218409"},Realistic={"17172918855","17173014241"},Robot={"616088211","616089559"},Sneaky={"1132473842","1132477671"},["Sports (Adidas)"]={"18537376492","18537371272"},Soldier={"3972151362","3972151362"},Stylish={"616136790","616138447"},["Stylized Female"]={"4708191566","4708192150"},Superhero={"10921288909","10921290167"},Toy={"782841498","782845736"},Udzal={"3303162274","3303162549"},Vampire={"1083445855","1083450166"},Werewolf={"1083195517","1083214717"},["Wicked (Popular)"]={"118832222982049","76049494037641"},["No Boundaries (Walmart)"]={"18747067405","18747063918"},Zombie={"616158929","616160636"}},
+                    Walk={Gojo="95643163365384",Geto="85811471336028",Astronaut="891667138",["Adidas Community"]="122150855457006",Bold="16738340646",Bubbly="910034870",Smooth="76630051272791",Cartoony="742640026",Confident="1070017263",Cowboy="1014421541",["Catwalk Glam"]="109168724482748",["Drooling Zombie"]="3489174223",Elder="10921111375",Ghost="616013216",Knight="10921127095",Levitation="616013216",Mage="707897309",Ninja="656121766",NFL="110358958299415",OldSchool="10921244891",Patrol="1151231493",Pirate="750785693",["Default Retarget"]="115825677624788",Popstar="1212980338",Princess="941028902",R6="12518152696",["R15 Reanimated"]="4211223236",["2016 Animation (mm2)"]="387947975",Robot="616095330",Sneaky="1132510133",["Sports (Adidas)"]="18537392113",Stylish="616146177",["Stylized Female"]="4708193840",Superhero="10921298616",Toy="782843345",Udzal="3303162967",Vampire="1083473930",Werewolf="1083178339",["Wicked (Popular)"]="92072849924640",["No Boundaries (Walmart)"]="18747074203",Zombie="616168032"},
+                    Run={["2016 Animation (mm2)"]="387947975",Soccer="116881956670910",["Adidas Community"]="82598234841035",Astronaut="10921039308",Naruto="104074120169874",Bold="16738337225",Bubbly="10921057244",Cartoony="10921076136",Dog="130072963359721",Confident="1070001516",Lagging="71095688469567",Cowboy="1014401683",["Catwalk Glam"]="81024476153754",["Drooling Zombie"]="3489173414",Elder="10921104374",Ghost="616013216",["Heavy Run (Udzal / Borock)"]="3236836670",Knight="10921121197",Levitation="616010382",Mage="10921148209",MrToilet="4417979645",Ninja="656118852",NFL="117333533048078",OldSchool="10921240218",Patrol="1150967949",Pirate="750783738",["Default Retarget"]="102294264237491",Popstar="1212980348",Princess="941015281",R6="12518152696",["R15 Reanimated"]="4211220381",Robot="10921250460",Sneaky="1132494274",["Sports (Adidas)"]="18537384940",Stylish="10921276116",["Stylized Female"]="4708192705",Superhero="10921291831",Toy="10921306285",Vampire="10921320299",Werewolf="10921336997",["Wicked (Popular)"]="72301599441680",["No Boundaries (Walmart)"]="18747070484",Zombie="616163682"},
+                    Jump={Astronaut="891627522",["Adidas Community"]="656117878",Bold="16738336650",Bubbly="910016857",Cartoony="742637942",["Catwalk Glam"]="116936326516985",Confident="1069984524",Cowboy="1014394726",Elder="10921107367",Ghost="616008936",Knight="910016857",Levitation="616008936",Mage="10921149743",Ninja="656117878",NFL="119846112151352",OldSchool="10921242013",Patrol="1148811837",Pirate="750782230",["Default Retarget"]="117150377950987",Popstar="1212954642",Princess="941008832",Robot="616090535",["R15 Reanimated"]="4211219390",R6="12520880485",Sneaky="1132489853",["Sports (Adidas)"]="18537380791",Stylish="616139451",["Stylized Female"]="4708188025",Superhero="10921294559",Toy="10921308158",Vampire="1083455352",Werewolf="1083218792",["Wicked (Popular)"]="104325245285198",["No Boundaries (Walmart)"]="18747069148",Zombie="616161997"},
+                    Fall={Astronaut="891617961",["Adidas Community"]="98600215928904",Bold="16738333171",Bubbly="910001910",Cartoony="742637151",["Catwalk Glam"]="92294537340807",Confident="1069973677",Cowboy="1014384571",Elder="10921105765",Knight="10921122579",Levitation="616005863",Mage="707829716",Ninja="656115606",NFL="129773241321032",OldSchool="10921241244",Patrol="1148863382",Pirate="750780242",["Default Retarget"]="110205622518029",Popstar="1212900995",Princess="941000007",Robot="616087089",["R15 Reanimated"]="4211216152",R6="12520972571",Sneaky="1132469004",["Sports (Adidas)"]="18537367238",Stylish="616134815",["Stylized Female"]="4708186162",Superhero="10921293373",Toy="782846423",Vampire="1083443587",Werewolf="1083189019",["Wicked (Popular)"]="121152442762481",["No Boundaries (Walmart)"]="18747062535",Zombie="616157476"},
+                    SwimIdle={Astronaut="891663592",["Adidas Community"]="109346520324160",Bold="16738339817",Bubbly="910030921",Cartoony="10921079380",["Catwalk Glam"]="98854111361360",Confident="1070012133",CowBoy="1014411816",Elder="10921110146",Mage="707894699",Ninja="656118341",NFL="79090109939093",Patrol="1151221899",Knight="10921125935",OldSchool="10921244018",Levitation="10921139478",Popstar="1212998578",Princess="941025398",Pirate="750785176",R6="12518152696",Robot="10921253767",Sneaky="1132506407",["Sports (Adidas)"]="18537387180",Stylish="10921281964",Stylized="4708190607",SuperHero="10921297391",Toy="10921310341",Vampire="10921325443",Werewolf="10921341319",["Wicked (Popular)"]="113199415118199",["No Boundaries (Walmart)"]="18747071682"},
+                    Swim={Astronaut="891663592",["Adidas Community"]="133308483266208",Bubbly="910028158",Bold="16738339158",Cartoony="10921079380",["Catwalk Glam"]="134591743181628",CowBoy="1014406523",Confident="1070009914",Elder="10921108971",Knight="10921125160",Mage="707876443",NFL="132697394189921",OldSchool="10921243048",PopStar="1212998578",Princess="941018893",Pirate="750784579",Patrol="1151204998",R6="12518152696",Robot="10921253142",Levitation="10921138209",Stylish="10921281000",SuperHero="10921295495",Sneaky="1132500520",["Sports (Adidas)"]="18537389531",Toy="10921309319",Vampire="10921324408",Werewolf="10921340419",["Wicked (Popular)"]="99384245425157",["No Boundaries (Walmart)"]="18747073181",Zombie="616165109"},
+                    Climb={Astronaut="10921032124",["Adidas Community"]="88763136693023",Bold="16738332169",Cartoony="742636889",["Catwalk Glam"]="119377220967554",Confident="1069946257",CowBoy="1014380606",Elder="845392038",Ghost="616003713",Knight="10921125160",Levitation="10921132092",Mage="707826056",Ninja="656114359",NFL="134630013742019",OldSchool="10921229866",Patrol="1148811837",Popstar="1213044953",Princess="940996062",R6="12520982150",["Reanimated R15"]="4211214992",Robot="616086039",Sneaky="1132461372",["Sports (Adidas)"]="18537363391",Stylish="10921271391",["Stylized Female"]="4708184253",SuperHero="10921286911",Toy="10921300839",Vampire="1083439238",WereWolf="10921329322",["Wicked (Popular)"]="131326830509784",["No Boundaries (Walmart)"]="18747060903",Zombie="616156119"}}
+                
+                local function loadAnimation(animationId) local char = speaker.Character or speaker.CharacterAdded:Wait(); local anim = Instance.new("Animation"); anim.AnimationId = "rbxassetid://"..tostring(animationId); return char:WaitForChild("Humanoid"):LoadAnimation(anim) end
+                for _, sets in pairs(Animations) do for _, ids in pairs(sets) do if type(ids)=="table" then for _, id in ipairs(ids) do task.spawn(loadAnimation, id) end else task.spawn(loadAnimation, ids) end end end
+
+                local function Buy(gamePassID)
+                    pcall(function() game:GetService("MarketplaceService"):PromptGamePassPurchase(speaker, gamePassID) end)
+                end
+
+                local function ResetIdle() pcall(function() StopAnim(); local anim = speaker.Character.Animate; anim.idle.Animation1.AnimationId, anim.idle.Animation2.AnimationId = "http://www.roblox.com/asset/?id=0", "http://www.roblox.com/asset/?id=0" end) end
+                local function ResetWalk() pcall(function() StopAnim(); speaker.Character.Animate.walk.WalkAnim.AnimationId = "http://www.roblox.com/asset/?id=0" end) end
+                local function ResetRun() pcall(function() StopAnim(); task.wait(0.1); speaker.Character.Animate.run.RunAnim.AnimationId = "http://www.roblox.com/asset/?id=0" end) end
+                local function ResetJump() pcall(function() StopAnim(); task.wait(0.1); speaker.Character.Animate.jump.JumpAnim.AnimationId = "http://www.roblox.com/asset/?id=0" end) end
+                local function ResetFall() pcall(function() StopAnim(); speaker.Character.Animate.fall.FallAnim.AnimationId = "http://www.roblox.com/asset/?id=0" end) end
+                local function ResetSwim() pcall(function() StopAnim(); local anim = speaker.Character.Animate; if anim.swim then anim.swim.Swim.AnimationId = "http://www.roblox.com/asset/?id=0" end end) end
+                local function ResetSwimIdle() pcall(function() StopAnim(); local anim = speaker.Character.Animate; if anim.swimidle then anim.swimidle.SwimIdle.AnimationId = "http://www.roblox.com/asset/?id=0" end end) end
+                local function ResetClimb() pcall(function() StopAnim(); speaker.Character.Animate.climb.ClimbAnim.AnimationId = "http://www.roblox.com/asset/?id=0" end) end
+                
+                local function setAnimation(animationType, animationId)
+                    -- ## PERBAIKAN ANIMASI: Fungsi untuk menyimpan animasi ke file global
+                    local function saveLastAnimations() 
+                        if writefile then 
+                            pcall(function() 
+                                local data = HttpService:JSONEncode(lastAnimations)
+                                writefile(ANIMATION_SAVE_FILE, data) 
+                            end) 
+                        end 
+                    end
+                    local char = speaker.Character; if not char then return end
+                    local Anim = char:FindFirstChild("Animate"); if not Anim then return end
+                    local humanoid = char:WaitForChild("Humanoid"); humanoid.PlatformStand = true; task.wait(0.1)
+                    
+                    if animationType == "Idle" then lastAnimations.Idle = animationId; ResetIdle(); Anim.idle.Animation1.AnimationId, Anim.idle.Animation2.AnimationId = "http://www.roblox.com/asset/?id="..animationId[1], "http://www.roblox.com/asset/?id="..animationId[2]; refresh()
+                    elseif animationType == "Walk" then lastAnimations.Walk = animationId; ResetWalk(); Anim.walk.WalkAnim.AnimationId = "http://www.roblox.com/asset/?id="..animationId; refresh()
+                    elseif animationType == "Run" then lastAnimations.Run = animationId; ResetRun(); Anim.run.RunAnim.AnimationId = "http://www.roblox.com/asset/?id="..animationId; refresh()
+                    elseif animationType == "Jump" then lastAnimations.Jump = animationId; ResetJump(); Anim.jump.JumpAnim.AnimationId = "http://www.roblox.com/asset/?id="..animationId; refresh()
+                    elseif animationType == "Fall" then lastAnimations.Fall = animationId; ResetFall(); Anim.fall.FallAnim.AnimationId = "http://www.roblox.com/asset/?id="..animationId; refresh()
+                    elseif animationType == "Swim" and Anim.swim then lastAnimations.Swim = animationId; ResetSwim(); Anim.swim.Swim.AnimationId = "http://www.roblox.com/asset/?id="..animationId; refreshswim()
+                    elseif animationType == "SwimIdle" and Anim.swimidle then lastAnimations.SwimIdle = animationId; ResetSwimIdle(); Anim.swimidle.SwimIdle.AnimationId = "http://www.roblox.com/asset/?id="..animationId; refreshswim()
+                    elseif animationType == "Climb" then lastAnimations.Climb = animationId; ResetClimb(); Anim.climb.ClimbAnim.AnimationId = "http://www.roblox.com/asset/?id="..animationId; refreshclimb() end
+                    saveLastAnimations(); task.wait(0.1); humanoid.PlatformStand = false
+                end
+                
+                -- Hapus fungsi loadLastAnimations lokal, karena sudah ada di global
+                
+                local function PlayEmote(animationId) StopAnim(); local track = loadAnimation(animationId); track:Play(); local conn; conn = RunService.RenderStepped:Connect(function() if speaker.Character:WaitForChild("Humanoid").MoveDirection.Magnitude > 0 then track:Stop(); conn:Disconnect() end end) end
+                local function ZeroPlayEmote(animationId) StopAnim(); local track = loadAnimation(animationId); track:Play(); track:AdjustSpeed(0); local conn; conn = RunService.RenderStepped:Connect(function() if speaker.Character:WaitForChild("Humanoid").MoveDirection.Magnitude > 0 then track:Stop(); conn:Disconnect() end end) end
+                local function FPlayEmote(animationId) StopAnim(); local track = loadAnimation(animationId); track:Play(); task.delay(track.Length * 0.9, function() track:AdjustSpeed(0) end); local conn; conn = RunService.RenderStepped:Connect(function() if speaker.Character:WaitForChild("Humanoid").MoveDirection.Magnitude > 0 then track:Stop(); conn:Disconnect() end end) end
+                
+                local function AddEmote(name, id) createTheButton(name.." - Emote", function() PlayEmote(id) end) end
+                local function ZeroAddEmote(name, id) createTheButton(name.." - Emote", function() ZeroPlayEmote(id) end) end
+                local function AddFEmote(name, id) createTheButton(name.." - Emote", function() FPlayEmote(id) end) end
+                local function AddDonate(Price, Id) createTheButton("Donate "..Price.." Robux", function() Buy(Id) end) end
+                local function createAnimationButton(text, animType, animId) createTheButton(text.." - "..animType, function() setAnimation(animType, animId) end) end
+                
+                local function resetToAdidasSport()
+                    local anims = Animations
+                    if anims.Walk["Sports (Adidas)"] then setAnimation("Walk", anims.Walk["Sports (Adidas)"]) end
+                    if anims.Run["Sports (Adidas)"] then setAnimation("Run", anims.Run["Sports (Adidas)"]) end
+                    if anims.Jump["Sports (Adidas)"] then setAnimation("Jump", anims.Jump["Sports (Adidas)"]) end
+                    if anims.Fall["Sports (Adidas)"] then setAnimation("Fall", anims.Fall["Sports (Adidas)"]) end
+                    if anims.Swim["Sports (Adidas)"] then setAnimation("Swim", anims.Swim["Sports (Adidas)"]) end
+                    if anims.SwimIdle["Sports (Adidas)"] then setAnimation("SwimIdle", anims.SwimIdle["Sports (Adidas)"]) end
+                    if anims.Climb["Sports (Adidas)"] then setAnimation("Climb", anims.Climb["Sports (Adidas)"]) end
+                end
+                createTheButton("Reset to Adidas Sport", resetToAdidasSport)
+                
+                for name, ids in pairs(Animations.Idle) do task.wait(); createAnimationButton(name, "Idle", ids) end
+                for name, id in pairs(Animations.Walk) do task.wait(); createAnimationButton(name, "Walk", id) end
+                for name, id in pairs(Animations.Run) do task.wait(); createAnimationButton(name, "Run", id) end
+                for name, id in pairs(Animations.Jump) do task.wait(); createAnimationButton(name, "Jump", id) end
+                for name, id in pairs(Animations.Fall) do task.wait(); createAnimationButton(name, "Fall", id) end
+                for name, id in pairs(Animations.SwimIdle) do task.wait(); createAnimationButton(name, "SwimIdle", id) end
+                for name, id in pairs(Animations.Swim) do task.wait(); createAnimationButton(name, "Swim", id) end
+                for name, id in pairs(Animations.Climb) do task.wait(); createAnimationButton(name, "Climb", id) end
+
+                -- ## PERBAIKAN ANIMASI: Hapus CharacterAdded lokal, akan ditangani secara global
+                -- speaker.CharacterAdded:Connect(...) DIHAPUS DARI SINI
+                
+                AddDonate(20, 1131371530); AddDonate(200, 1131065702); AddDonate(183, 1129915318); AddDonate(2000, 1128299749)
+                AddEmote("Dance 1", 12521009666); AddEmote("Dance 2", 12521169800); AddEmote("Dance 3", 12521178362); AddEmote("Cheer", 12521021991); AddEmote("Laugh", 12521018724); AddEmote("Point", 12521007694); AddEmote("Wave", 12521004586)
+                AddFEmote("Soldier - Assault Fire", 4713811763); AddEmote("Soldier - Assault Aim", 4713633512); AddEmote("Zombie - Attack", 3489169607); AddFEmote("Zombie - Death", 3716468774); AddEmote("Roblox - Sleep", 2695918332); AddEmote("Roblox - Quake", 2917204509); AddEmote("Roblox - Rifle Reload", 3972131105)
+                ZeroAddEmote("Accurate T Pose", 2516930867)
+            end)
 
             -- Tidak perlu load animasi di sini lagi
             
@@ -1131,28 +1235,29 @@ task.spawn(function()
     -- ====================================================================
 
     local function StartFly()
-        if IsFlying then return end; local character = LocalPlayer.Character; if not (character and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChildOfClass("Humanoid")) then return end; local root = character:WaitForChild("HumanoidRootPart"); local humanoid = character:FindFirstChildOfClass("Humanoid"); IsFlying = true; humanoid.PlatformStand = true; local bodyGyro = Instance.new("BodyGyro", root); bodyGyro.Name = "FlyGyro"; bodyGyro.P = 9e4; bodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9); bodyGyro.CFrame = root.CFrame; local bodyVelocity = Instance.new("BodyVelocity", root); bodyVelocity.Name = "FlyVelocity"; bodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9); bodyVelocity.Velocity = Vector3.new(0, 0, 0); local controls = {F = 0, B = 0, L = 0, R = 0, Q = 0, E = 0}
+        if IsFlying then return end; local character = LocalPlayer.Character; if not (character and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChildOfClass("Humanoid")) then return end; local root = character:WaitForChild("HumanoidRootPart"); local humanoid = character:FindFirstChildOfClass("Humanoid"); IsFlying = true; saveFeatureStates(); humanoid.PlatformStand = true; local bodyGyro = Instance.new("BodyGyro", root); bodyGyro.Name = "FlyGyro"; bodyGyro.P = 9e4; bodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9); bodyGyro.CFrame = root.CFrame; local bodyVelocity = Instance.new("BodyVelocity", root); bodyVelocity.Name = "FlyVelocity"; bodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9); bodyVelocity.Velocity = Vector3.new(0, 0, 0); local controls = {F = 0, B = 0, L = 0, R = 0, Q = 0, E = 0}
         table.insert(FlyConnections, UserInputService.InputBegan:Connect(function(input, processed) if processed then return end; if input.UserInputType == Enum.UserInputType.Keyboard then local key = input.KeyCode.Name:lower(); if key == "w" then controls.F = Settings.FlySpeed elseif key == "s" then controls.B = -Settings.FlySpeed elseif key == "a" then controls.L = -Settings.FlySpeed elseif key == "d" then controls.R = Settings.FlySpeed elseif key == "e" then controls.Q = Settings.FlySpeed * 2 elseif key == "q" then controls.E = -Settings.FlySpeed * 2 end; Workspace.CurrentCamera.CameraType = Enum.CameraType.Track end end))
         table.insert(FlyConnections, UserInputService.InputEnded:Connect(function(input, processed) if processed then return end; if input.UserInputType == Enum.UserInputType.Keyboard then local key = input.KeyCode.Name:lower(); if key == "w" then controls.F = 0 elseif key == "s" then controls.B = 0 elseif key == "a" then controls.L = 0 elseif key == "d" then controls.R = 0 elseif key == "e" then controls.Q = 0 elseif key == "q" then controls.E = 0 end end end))
         table.insert(FlyConnections, RunService.RenderStepped:Connect(function() if not IsFlying then return end; local speed = (controls.L + controls.R ~= 0 or controls.F + controls.B ~= 0 or controls.Q + controls.E ~= 0) and 50 or 0; local camera = Workspace.CurrentCamera; if speed ~= 0 then bodyVelocity.Velocity = ((camera.CFrame.LookVector * (controls.F + controls.B)) + ((camera.CFrame * CFrame.new(controls.L + controls.R, (controls.F + controls.B + controls.Q + controls.E) * 0.2, 0).Position) - camera.CFrame.Position)) * speed else bodyVelocity.Velocity = Vector3.new(0, 0, 0) end; bodyGyro.CFrame = camera.CFrame end))
     end
 
     local function StopFly()
-        if not IsFlying then return end; IsFlying = false; local character = LocalPlayer.Character; if character and character:FindFirstChildOfClass("Humanoid") then character.Humanoid.PlatformStand = false end; for _, conn in pairs(FlyConnections) do conn:Disconnect() end; FlyConnections = {}; local root = character and character:FindFirstChild("HumanoidRootPart"); if root then if root:FindFirstChild("FlyGyro") then root.FlyGyro:Destroy() end; if root:FindFirstChild("FlyVelocity") then root.FlyVelocity:Destroy() end end; Workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+        if not IsFlying then return end; IsFlying = false; saveFeatureStates(); local character = LocalPlayer.Character; if character and character:FindFirstChildOfClass("Humanoid") then character.Humanoid.PlatformStand = false end; for _, conn in pairs(FlyConnections) do conn:Disconnect() end; FlyConnections = {}; local root = character and character:FindFirstChild("HumanoidRootPart"); if root then if root:FindFirstChild("FlyGyro") then root.FlyGyro:Destroy() end; if root:FindFirstChild("FlyVelocity") then root.FlyVelocity:Destroy() end end; Workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
     end
 
     local function StopMobileFly()
-        if not IsFlying then return end; IsFlying = false; local character = LocalPlayer.Character; if character and character:FindFirstChildOfClass("Humanoid") then character.Humanoid.PlatformStand = false end; for _, conn in pairs(FlyConnections) do conn:Disconnect() end; FlyConnections = {}; local root = character and character:FindFirstChild("HumanoidRootPart"); if root then if root:FindFirstChild("FlyGyro") then root.FlyGyro:Destroy() end; if root:FindFirstChild("FlyVelocity") then root.FlyVelocity:Destroy() end end; Workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+        if not IsFlying then return end; IsFlying = false; saveFeatureStates(); local character = LocalPlayer.Character; if character and character:FindFirstChildOfClass("Humanoid") then character.Humanoid.PlatformStand = false end; for _, conn in pairs(FlyConnections) do conn:Disconnect() end; FlyConnections = {}; local root = character and character:FindFirstChild("HumanoidRootPart"); if root then if root:FindFirstChild("FlyGyro") then root.FlyGyro:Destroy() end; if root:FindFirstChild("FlyVelocity") then root.FlyVelocity:Destroy() end end; Workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
     end
 
     local function StartMobileFly()
         if IsFlying then return end; local character = LocalPlayer.Character; if not (character and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChildOfClass("Humanoid")) then return end; local root = character:WaitForChild("HumanoidRootPart"); local humanoid = character:FindFirstChildOfClass("Humanoid"); local success, controlModule = pcall(require, LocalPlayer.PlayerScripts:WaitForChild("PlayerModule"):WaitForChild("ControlModule")); if not success then showNotification("Gagal memuat modul kontrol mobile.", Color3.fromRGB(255, 100, 100)); return end
-        IsFlying = true; humanoid.PlatformStand = true; local bodyVelocity = Instance.new("BodyVelocity", root); bodyVelocity.Name = "FlyVelocity"; bodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9); bodyVelocity.Velocity = Vector3.new(0, 0, 0); local bodyGyro = Instance.new("BodyGyro", root); bodyGyro.Name = "FlyGyro"; bodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9); bodyGyro.P = 1000; bodyGyro.D = 50
+        IsFlying = true; saveFeatureStates(); humanoid.PlatformStand = true; local bodyVelocity = Instance.new("BodyVelocity", root); bodyVelocity.Name = "FlyVelocity"; bodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9); bodyVelocity.Velocity = Vector3.new(0, 0, 0); local bodyGyro = Instance.new("BodyGyro", root); bodyGyro.Name = "FlyGyro"; bodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9); bodyGyro.P = 1000; bodyGyro.D = 50
         table.insert(FlyConnections, RunService.RenderStepped:Connect(function() if not IsFlying then return end; local camera = Workspace.CurrentCamera; if not (character and root and root:FindFirstChild("FlyVelocity") and root:FindFirstChild("FlyGyro")) then StopMobileFly(); return end; root.FlyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9); root.FlyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9); root.FlyGyro.CFrame = camera.CFrame; root.FlyVelocity.Velocity = Vector3.new(0, 0, 0); local direction = controlModule:GetMoveVector(); if direction.X ~= 0 then root.FlyVelocity.Velocity = root.FlyVelocity.Velocity + camera.CFrame.RightVector * (direction.X * (Settings.FlySpeed * 50)) end; if direction.Z ~= 0 then root.FlyVelocity.Velocity = root.FlyVelocity.Velocity - camera.CFrame.LookVector * (direction.Z * (Settings.FlySpeed * 50)) end end))
     end
 
     local function ToggleNoclip(enabled)
         IsNoclipEnabled = enabled
+        saveFeatureStates()
         if enabled then task.spawn(function() while IsNoclipEnabled and LocalPlayer.Character do for _, part in pairs(LocalPlayer.Character:GetDescendants()) do if part:IsA("BasePart") and part.CanCollide then part.CanCollide = false end end; task.wait(0.1) end; if LocalPlayer.Character then for _, part in pairs(LocalPlayer.Character:GetDescendants()) do if part:IsA("BasePart") then part.CanCollide = true end end end end) end
     end
 
@@ -1162,11 +1267,11 @@ task.spawn(function()
     end
 
     local function ToggleGodMode(enabled)
-        IsGodModeEnabled = enabled; if enabled then if LocalPlayer.Character then applyGodMode(LocalPlayer.Character) end elseif godModeConnection then godModeConnection:Disconnect(); godModeConnection = nil end
+        IsGodModeEnabled = enabled; saveFeatureStates(); if enabled then if LocalPlayer.Character then applyGodMode(LocalPlayer.Character) end elseif godModeConnection then godModeConnection:Disconnect(); godModeConnection = nil end
     end
 
     local function ToggleWalkSpeed(enabled)
-        IsWalkSpeedEnabled = enabled; if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then LocalPlayer.Character.Humanoid.WalkSpeed = enabled and Settings.WalkSpeed or OriginalWalkSpeed end
+        IsWalkSpeedEnabled = enabled; saveFeatureStates(); if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then LocalPlayer.Character.Humanoid.WalkSpeed = enabled and Settings.WalkSpeed or OriginalWalkSpeed end
     end
 
     local function CreateTouchFlingGUI()
@@ -1194,12 +1299,14 @@ task.spawn(function()
     
     local function ToggleKillAura(enabled)
         IsKillAuraEnabled = enabled
+        saveFeatureStates()
         if enabled then KillAuraConnection = RunService.Heartbeat:Connect(function() local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"); if not root then return end; for _, npc in pairs(Workspace:GetDescendants()) do if npc:IsA("Model") and npc ~= LocalPlayer.Character and npc:FindFirstChildOfClass("Humanoid") and npc:FindFirstChild("HumanoidRootPart") then local humanoid = npc.Humanoid; if humanoid.Health > 0 and (npc.HumanoidRootPart.Position - root.Position).Magnitude <= Settings.KillAuraRadius then humanoid:TakeDamage(Settings.KillAuraDamage) end end end end)
         elseif KillAuraConnection then KillAuraConnection:Disconnect(); KillAuraConnection = nil end
     end
     
     local function ToggleAimbot(enabled)
         IsAimbotEnabled = enabled
+        saveFeatureStates()
         if enabled then CreateFOVCircle(); AimbotConnection = RunService.RenderStepped:Connect(function() local camera = Workspace.CurrentCamera; local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"); if not (root and camera) then return end; local mousePos = UserInputService:GetMouseLocation(); local closestNPC, closestDistance = nil, Settings.AimbotFOV; for _, npc in pairs(Workspace:GetDescendants()) do if npc:IsA("Model") and npc ~= LocalPlayer.Character and npc:FindFirstChildOfClass("Humanoid") and npc:FindFirstChild(Settings.AimbotPart) then local humanoid = npc.Humanoid; if humanoid.Health > 0 then local screenPos, onScreen = camera:WorldToViewportPoint(npc[Settings.AimbotPart].Position); if onScreen then local distance = (mousePos - Vector2.new(screenPos.X, screenPos.Y)).Magnitude; if distance <= closestDistance then closestDistance, closestNPC = distance, npc end end end end end; AimbotTarget = closestNPC; if AimbotTarget and AimbotTarget:FindFirstChild(Settings.AimbotPart) then camera.CFrame = CFrame.new(camera.CFrame.Position, AimbotTarget[Settings.AimbotPart].Position); AimbotTarget.Humanoid:TakeDamage(Settings.KillAuraDamage) end; if FOVPart then FOVPart.CFrame = CFrame.new(root.Position + Vector3.new(0, 2, 0)); FOVPart.FOVGui.Enabled = true end end)
         else if AimbotConnection then AimbotConnection:Disconnect(); AimbotConnection = nil end; AimbotTarget = nil; if FOVPart then FOVPart:Destroy(); FOVPart = nil end end
     end
@@ -1209,30 +1316,130 @@ task.spawn(function()
     end
     
     local function ToggleAntiFling(enabled)
-        antifling_enabled = enabled; if enabled and not antifling_connection then antifling_connection = RunService.Heartbeat:Connect(protect_character) elseif not enabled and antifling_connection then antifling_connection:Disconnect(); antifling_connection = nil end
+        antifling_enabled = enabled; saveFeatureStates(); if enabled and not antifling_connection then antifling_connection = RunService.Heartbeat:Connect(protect_character) elseif not enabled and antifling_connection then antifling_connection:Disconnect(); antifling_connection = nil end
     end
 
     local function ToggleAntiLag(enabled)
         IsAntiLagEnabled = enabled
+        saveFeatureStates()
         if enabled then
             Lighting.GlobalShadows = false; Lighting.FogEnd = 999999
             if settings then pcall(function() settings().Rendering.QualityLevel = "Level01" end) end
             for _, v in pairs(Workspace:GetDescendants()) do if v:IsA("ParticleEmitter") or v:IsA("Explosion") or v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") then v.Enabled = false end end
             for _, v in pairs(Lighting:GetChildren()) do if v:IsA("BlurEffect") or v:IsA("SunRaysEffect") or v:IsA("ColorCorrectionEffect") or v:IsA("BloomEffect") or v:IsA("DepthOfFieldEffect") then v.Enabled = false end end
             antiLagConnection = Workspace.DescendantAdded:Connect(function(descendant) if descendant:IsA("ParticleEmitter") or descendant:IsA("Explosion") or descendant:IsA("Fire") or descendant:IsA("Smoke") or descendant:IsA("Sparkles") then task.wait(); descendant.Enabled = false end end)
-            showNotification("Anti-Lag Diaktifkan", Color3.fromRGB(50, 200, 50))
+            -- showNotification("Anti-Lag Diaktifkan", Color3.fromRGB(50, 200, 50))
         else
             if antiLagConnection then antiLagConnection:Disconnect(); antiLagConnection = nil end
             Lighting.GlobalShadows = true
             if settings then pcall(function() settings().Rendering.QualityLevel = "Automatic" end) end
             for _, v in pairs(Workspace:GetDescendants()) do if v:IsA("ParticleEmitter") or v:IsA("Explosion") or v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") then v.Enabled = true end end
             for _, v in pairs(Lighting:GetChildren()) do if v:IsA("BlurEffect") or v:IsA("SunRaysEffect") or v:IsA("ColorCorrectionEffect") or v:IsA("BloomEffect") or v:IsA("DepthOfFieldEffect") then v.Enabled = true end end
-            showNotification("Anti-Lag Dinonaktifkan", Color3.fromRGB(200, 150, 50))
+            -- showNotification("Anti-Lag Dinonaktifkan", Color3.fromRGB(200, 150, 50))
+        end
+    end
+
+    -- ====================================================================
+    -- == FITUR BARU: INVISIBLE DAN HOP SERVER                         ==
+    -- ====================================================================
+
+    -- [[ PERBAIKAN FITUR INVISIBLE ]] --
+    -- Fungsi ini sekarang mengembalikan tampilan karakter tanpa perlu respawn
+    -- dan notifikasi telah dihapus sesuai permintaan.
+    local function ToggleInvisibility(enabled)
+        IsInvisibilityEnabled = enabled
+        saveFeatureStates()
+        local char = LocalPlayer.Character
+        if not char then return end
+
+        if enabled then
+            -- Simpan tampilan original sebelum dibuat tidak terlihat
+            originalCharacterAppearance = {}
+            pcall(function()
+                for _, part in pairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") or part:IsA("Decal") then
+                        originalCharacterAppearance[part] = part.Transparency
+                        part.Transparency = 1
+                    end
+                end
+                local humanoid = char:FindFirstChildOfClass("Humanoid")
+                if humanoid then
+                    originalCharacterAppearance["HumanoidDisplayDistanceType"] = humanoid.DisplayDistanceType
+                    humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+                end
+            end)
+        else
+            -- Kembalikan tampilan original dari data yang disimpan
+            pcall(function()
+                for part, transparency in pairs(originalCharacterAppearance) do
+                    if part and part.Parent then -- Pastikan part masih ada di dalam game
+                        part.Transparency = transparency
+                    end
+                end
+                 local humanoid = char:FindFirstChildOfClass("Humanoid")
+                if humanoid and originalCharacterAppearance["HumanoidDisplayDistanceType"] then
+                    humanoid.DisplayDistanceType = originalCharacterAppearance["HumanoidDisplayDistanceType"]
+                end
+            end)
+            originalCharacterAppearance = {} -- Kosongkan tabel setelah digunakan
+        end
+    end
+
+
+    local function HopServer()
+        -- [[ FUNGSI HOP SERVER DENGAN RE-EXECUTOR ]]
+        
+        -- Langkah 1: Pengecekan Setup
+        if SCRIPT_URL == "GANTI_DENGAN_URL_RAW_PASTEBIN_ATAU_GIST_ANDA" then
+            showNotification("URL Skrip belum diatur! Lihat bagian atas skrip.", Color3.fromRGB(255, 100, 0))
+            return
+        end
+
+        local servers = {}
+        local success, response = pcall(function()
+            return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. tostring(game.PlaceId) .. "/servers/Public?sortOrder=Asc&limit=100"))
+        end)
+
+        if not success or not response or not response.data then
+            showNotification("Gagal mengambil daftar server.", Color3.fromRGB(200, 50, 50))
+            warn("Server Hop Error:", response)
+            return
+        end
+        
+        for _, server in ipairs(response.data) do
+            if type(server) == 'table' and server.id ~= game.JobId and server.playing < server.maxPlayers then
+                table.insert(servers, server.id)
+            end
+        end
+
+        if #servers > 0 then
+            local randomServer = servers[math.random(1, #servers)]
+            
+            -- Langkah 2: Simpan semua status dan posisi UI
+            saveFeatureStates()
+            saveGuiPositions()
+            
+            -- Langkah 3: Jadwalkan re-eksekusi jika memungkinkan
+            if queue_on_teleport and type(queue_on_teleport) == "function" then
+                local loaderCode = "loadstring(game:HttpGet('" .. SCRIPT_URL .. "'))()"
+                queue_on_teleport(loaderCode)
+                showNotification("Re-eksekusi terjadwal, pindah server...", Color3.fromRGB(50, 150, 255))
+            else
+                showNotification("Executor tidak mendukung 'queue_on_teleport'. Gunakan auto-exec.", Color3.fromRGB(255, 150, 0))
+            end
+
+            task.wait(0.1) 
+            
+            pcall(function()
+                TeleportService:TeleportToPlaceInstance(game.PlaceId, randomServer, LocalPlayer)
+            end)
+        else
+            showNotification("Tidak ada server lain yang ditemukan.", Color3.fromRGB(200, 150, 50))
         end
     end
     
     local function DisableAllFeatures()
-        if IsFlying then if UserInputService.TouchEnabled then StopMobileFly() else StopFly() end end; if IsWalkSpeedEnabled then ToggleWalkSpeed(false) end; if IsNoclipEnabled then ToggleNoclip(false) end; if IsGodModeEnabled then ToggleGodMode(false) end; if IsKillAuraEnabled then ToggleKillAura(false) end; if IsAimbotEnabled then ToggleAimbot(false) end; if IsInfinityJumpEnabled then IsInfinityJumpEnabled = false; if infinityJumpConnection then infinityJumpConnection:Disconnect(); infinityJumpConnection = nil end end; if antifling_enabled then ToggleAntiFling(false) end; if IsAntiLagEnabled then ToggleAntiLag(false) end
+        if IsFlying then if UserInputService.TouchEnabled then StopMobileFly() else StopFly() end end; if IsWalkSpeedEnabled then ToggleWalkSpeed(false) end; if IsNoclipEnabled then ToggleNoclip(false) end; if IsGodModeEnabled then ToggleGodMode(false) end; if IsKillAuraEnabled then ToggleKillAura(false) end; if IsAimbotEnabled then ToggleAimbot(false) end; if IsInfinityJumpEnabled then IsInfinityJumpEnabled = false; if infinityJumpConnection then infinityJumpConnection:Disconnect(); infinityJumpConnection = nil end end; if antifling_enabled then ToggleAntiFling(false) end; if IsAntiLagEnabled then ToggleAntiLag(false) end; if IsInvisibilityEnabled then ToggleInvisibility(false) end
         if isEmoteEnabled then destroyEmoteGUI(); EmoteToggleButton.Visible = false end
         if isAnimationEnabled then destroyAnimationGUI(); AnimationShowButton.Visible = false end 
         if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then LocalPlayer.Character.Humanoid.WalkSpeed = OriginalWalkSpeed end
@@ -1253,7 +1460,7 @@ task.spawn(function()
         local sliderThumb = Instance.new("Frame", sliderBase); sliderThumb.Name = "SliderThumb"; sliderThumb.Size = UDim2.new(0, 15, 0, 25); sliderThumb.Position = UDim2.new(fillWidth, -7.5, 0.5, -12.5); sliderThumb.BackgroundColor3 = Color3.fromRGB(0, 200, 255); sliderThumb.BorderSizePixel = 0; local stCorner = Instance.new("UICorner", sliderThumb); stCorner.CornerRadius = UDim.new(0, 5); local stStroke = Instance.new("UIStroke", sliderThumb); stStroke.Color = Color3.fromRGB(255, 255, 255); stStroke.Thickness = 1; stStroke.Transparency = 0.8
         local isDraggingSlider = false; local function updateSlider(input) local pos = input.Position.X - sliderBase.AbsolutePosition.X; local newWidth = math.min(math.max(pos, 0), sliderBase.AbsoluteSize.X); local newValue = min + (newWidth / sliderBase.AbsoluteSize.X) * (max - min); newValue = math.floor(newValue / increment) * increment; local newFillWidth = (newValue - min) / (max - min); sliderFill.Size = UDim2.new(newFillWidth, 0, 1, 0); sliderThumb.Position = UDim2.new(newFillWidth, -7.5, 0.5, -12.5); titleLabel.Text = name .. ": " .. tostring(math.floor(newValue * 10) / 10) .. " " .. suffix; callback(newValue) end
         sliderBase.InputBegan:Connect(function(input, processed) if processed then return end; if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then isDraggingSlider = true; updateSlider(input) end end)
-        sliderBase.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then isDraggingSlider = false end end)
+        sliderBase.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then isDraggingSlider = false; saveFeatureStates() end end)
         UserInputService.InputChanged:Connect(function(input) if isDraggingSlider then updateSlider(input) end end)
         return sliderFrame
     end
@@ -1348,12 +1555,14 @@ task.spawn(function()
     createSlider(GeneralTabContent, "Kecepatan Terbang", 0, Settings.MaxFlySpeed, Settings.FlySpeed, "", 0.1, function(v) Settings.FlySpeed = v end)
     createToggle(GeneralTabContent, "Terbang", IsFlying, function(v) if v then if UserInputService.TouchEnabled then StartMobileFly() else StartFly() end else if UserInputService.TouchEnabled then StopMobileFly() else StopFly() end end end)
     createToggle(GeneralTabContent, "Noclip", IsNoclipEnabled, function(v) ToggleNoclip(v) end)
-    createToggle(GeneralTabContent, "Infinity Jump", IsInfinityJumpEnabled, function(v) IsInfinityJumpEnabled = v; if v then if LocalPlayer.Character and LocalPlayer.Character.Humanoid then infinityJumpConnection = UserInputService.JumpRequest:Connect(function() LocalPlayer.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end) end elseif infinityJumpConnection then infinityJumpConnection:Disconnect(); infinityJumpConnection = nil end end)
+    createToggle(GeneralTabContent, "Infinity Jump", IsInfinityJumpEnabled, function(v) IsInfinityJumpEnabled = v; saveFeatureStates(); if v then if LocalPlayer.Character and LocalPlayer.Character.Humanoid then infinityJumpConnection = UserInputService.JumpRequest:Connect(function() LocalPlayer.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end) end elseif infinityJumpConnection then infinityJumpConnection:Disconnect(); infinityJumpConnection = nil end end)
     createToggle(GeneralTabContent, "Mode Kebal", IsGodModeEnabled, ToggleGodMode) 
     createButton(GeneralTabContent, "Buka Touch Fling", CreateTouchFlingGUI)
     createToggle(GeneralTabContent, "Anti-Fling", antifling_enabled, ToggleAntiFling)
     createToggle(GeneralTabContent, "Anti-Lag", IsAntiLagEnabled, ToggleAntiLag)
-    
+    createToggle(GeneralTabContent, "Invisible", IsInvisibilityEnabled, function(v) ToggleInvisibility(v) end)
+    createButton(GeneralTabContent, "Hop Server", function() HopServer() end)
+
     -- Tab Tempur
     createSlider(CombatTabContent, "Radius Aura Serang", 0, Settings.MaxKillAuraRadius, Settings.KillAuraRadius, "Studs", 1, function(v) Settings.KillAuraRadius = v end)
     createSlider(CombatTabContent, "Kerusakan", 0, Settings.MaxKillAuraDamage, Settings.KillAuraDamage, "HP", 1, function(v) Settings.KillAuraDamage = v end)
@@ -1379,6 +1588,7 @@ task.spawn(function()
             EmoteToggleButton.Visible = false
         end 
     end)
+    -- [[ PERBAIKAN LOGIKA TOGGLE ANIMASI ]]
     createToggle(VipTabContent, "Aktifkan Animasi VIP", isAnimationEnabled, function(v) 
         isAnimationEnabled = v; 
         if isAnimationEnabled then 
@@ -1484,8 +1694,16 @@ task.spawn(function()
         end)
     end
     
-    -- [[ PERBAIKAN ANTI-RESET SAAT RESPAWN ]]
-    -- Fungsi ini akan menerapkan kembali semua fitur yang aktif ke karakter baru Anda.
+    -- [[ PERBAIKAN ANTI-RESET SAAT RESPAWN & HOP SERVER ]]
+
+    -- Fungsi ini HANYA untuk fitur yang tidak bergantung pada karakter, dijalankan sekali saat skrip dimuat
+    local function applyInitialStates()
+        if IsAntiLagEnabled then ToggleAntiLag(true) end
+        if IsKillAuraEnabled then ToggleKillAura(true) end
+        if IsAimbotEnabled then ToggleAimbot(true) end
+    end
+    
+    -- Fungsi ini akan menerapkan kembali semua fitur yang bergantung pada karakter baru Anda.
     local function reapplyFeaturesOnRespawn(character)
         if not character then return end
     
@@ -1537,6 +1755,11 @@ task.spawn(function()
             end
         end
 
+        -- Terapkan kembali Invisibility
+        if IsInvisibilityEnabled then
+            ToggleInvisibility(true)
+        end
+
         -- ## PERBAIKAN ANIMASI: Panggil fungsi untuk menerapkan animasi
         applyAllAnimations(character)
     end
@@ -1545,9 +1768,11 @@ task.spawn(function()
     LocalPlayer.CharacterAdded:Connect(reapplyFeaturesOnRespawn)
 
     -- INISIALISASI
-    loadAnimations() -- ## PERBAIKAN ANIMASI: Muat animasi saat skrip dimulai
+    loadAnimations()
     loadTeleportData()
     loadGuiPositions()
+    loadFeatureStates() -- Muat status fitur yang tersimpan
+    applyInitialStates() -- Terapkan fitur yang tidak bergantung pada karakter
     switchTab("Player")
     
     -- Terapkan fitur ke karakter yang sudah ada saat skrip dieksekusi pertama kali
