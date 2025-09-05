@@ -666,7 +666,7 @@ task.spawn(function()
         Title.Position = UDim2.new(0, 10, 0, 0)
         Title.BackgroundTransparency = 1
         Title.Font = Enum.Font.GothamBold
-        Title.Text = "Arexans Emotes [VIP]" -- [[ PERUBAHAN ]] Judul diubah
+        Title.Text = "Arexans Emotes [VIP]"
         Title.TextColor3 = Color3.fromRGB(255, 255, 255)
         Title.TextXAlignment = Enum.TextXAlignment.Left
         Title.Parent = Header
@@ -688,14 +688,25 @@ task.spawn(function()
         end)
         
         MakeDraggable(EmoteMainFrame, Header, function() return true end, nil)
-        
-        -- [[ PERUBAHAN ]] Kotak pencarian dihapus
-        -- local SearchBox = Instance.new("TextBox") ... (seluruh blok dihapus)
+
+        local SearchBox = Instance.new("TextBox")
+        SearchBox.Name = "SearchBox"
+        SearchBox.Size = UDim2.new(1, -20, 0, 25)
+        SearchBox.Position = UDim2.new(0, 10, 0, 35)
+        SearchBox.BackgroundColor3 = Color3.fromRGB(48, 63, 90)
+        SearchBox.PlaceholderText = "Cari emote..."
+        SearchBox.PlaceholderColor3 = Color3.fromRGB(180, 190, 210)
+        SearchBox.Font = Enum.Font.Gotham
+        SearchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+        SearchBox.ClearTextOnFocus = false
+        SearchBox.Parent = EmoteMainFrame
+        local SearchCorner = Instance.new("UICorner", SearchBox); SearchCorner.CornerRadius = UDim.new(0, 6)
+        local SearchPadding = Instance.new("UIPadding", SearchBox); SearchPadding.PaddingLeft = UDim.new(0, 10); SearchPadding.PaddingRight = UDim.new(0, 10)
 
         local EmoteArea = Instance.new("ScrollingFrame")
         EmoteArea.Name = "EmoteArea"
-        EmoteArea.Size = UDim2.new(1, 0, 1, -40) -- [[ PERUBAHAN ]] Ukuran disesuaikan
-        EmoteArea.Position = UDim2.new(0, 0, 0, 35) -- [[ PERUBAHAN ]] Posisi disesuaikan
+        EmoteArea.Size = UDim2.new(1, 0, 1, -70)
+        EmoteArea.Position = UDim2.new(0, 0, 0, 65)
         EmoteArea.BackgroundTransparency = 1
         EmoteArea.BorderSizePixel = 0
         EmoteArea.ScrollBarImageColor3 = Color3.fromRGB(90, 150, 255)
@@ -743,7 +754,14 @@ task.spawn(function()
             return button
         end
 
-        -- [[ PERUBAHAN ]] Fungsi populateEmotes dan koneksi ke SearchBox dihapus
+        local function populateEmotes(filter)
+            filter = filter and filter:lower() or ""
+            EmoteArea.CanvasPosition = Vector2.zero
+            for _, button in pairs(EmoteArea:GetChildren()) do
+                if button:IsA("ImageButton") then button.Visible = (filter == "" or button.Name:lower():find(filter, 1, true)) end
+            end
+            updateCanvasSize()
+        end
 
         task.spawn(function()
             local success, result = pcall(function() return HttpService:JSONDecode(game:HttpGet("https://raw.githubusercontent.com/AREXANS/emoteff/main/emote.json")) end)
@@ -761,6 +779,8 @@ task.spawn(function()
             if applyEmoteTransparency then applyEmoteTransparency(isEmoteTransparent) end
         end)
 
+        SearchBox:GetPropertyChangedSignal("Text"):Connect(function() populateEmotes(SearchBox.Text) end)
+        
         if applyEmoteTransparency then
             applyEmoteTransparency(isEmoteTransparent)
         end
@@ -772,6 +792,7 @@ task.spawn(function()
         if not mainFrame then return end
 
         local header = mainFrame:FindFirstChild("Header")
+        local searchBox = mainFrame:FindFirstChild("SearchBox")
         
         local transValue = 0.85
         local opaqueValue = 0
@@ -779,7 +800,7 @@ task.spawn(function()
         mainFrame.BackgroundTransparency = isTransparent and transValue or opaqueValue
         EmoteToggleButton.BackgroundTransparency = isTransparent and transValue or 0
         if header then header.BackgroundTransparency = isTransparent and transValue or opaqueValue end
-        -- if searchBox then searchBox.BackgroundTransparency = isTransparent and transValue or opaqueValue end -- [[ PERUBAHAN ]] Dihapus
+        if searchBox then searchBox.BackgroundTransparency = isTransparent and transValue or opaqueValue end
 
         local emoteArea = mainFrame:FindFirstChild("EmoteArea")
         if emoteArea then
@@ -878,13 +899,22 @@ task.spawn(function()
                 AnimationShowButton.Visible = true
             end)
 
-            -- [[ PERUBAHAN ]] Kotak pencarian dihapus
-            -- local searchBar = Instance.new("TextBox", frame) ... (seluruh blok dihapus)
+            local searchBar = Instance.new("TextBox", frame)
+            searchBar.Name = "SearchBar"
+            searchBar.PlaceholderText = "Search..."
+            searchBar.Font = Enum.Font.SourceSans
+            searchBar.TextScaled = true
+            searchBar.TextColor3 = Color3.fromRGB(200, 200, 200)
+            searchBar.BackgroundColor3 = Color3.fromRGB(40, 45, 60)
+            searchBar.BorderSizePixel = 0
+            searchBar.Size = UDim2.new(0.9, 0, 0.1, 0)
+            searchBar.Position = UDim2.new(0.05, 0, 0.12, 0)
+            searchBar.ClearTextOnFocus = true
 
             local scrollFrame = Instance.new("ScrollingFrame", frame)
             scrollFrame.Name = "ScrollFrame"
-            scrollFrame.Size = UDim2.new(0.9, 0, 0.86, 0) -- [[ PERUBAHAN ]] Ukuran disesuaikan
-            scrollFrame.Position = UDim2.new(0.05, 0, 0.12, 0) -- [[ PERUBAHAN ]] Posisi disesuaikan
+            scrollFrame.Size = UDim2.new(0.9, 0, 0.75, 0)
+            scrollFrame.Position = UDim2.new(0.05, 0, 0.23, 0)
             scrollFrame.BackgroundColor3 = Color3.fromRGB(35, 40, 55)
             scrollFrame.BorderSizePixel = 0
             scrollFrame.ScrollBarThickness = 6
@@ -924,7 +954,20 @@ task.spawn(function()
                 scrollFrame.CanvasSize = UDim2.new(0, 0, 0, #buttons * 30)
             end
 
-            -- [[ PERUBAHAN ]] Koneksi ke SearchBar dihapus
+            searchBar:GetPropertyChangedSignal("Text"):Connect(function()
+                local searchText = searchBar.Text:lower()
+                local order = 0
+                for _, button in ipairs(buttons) do
+                    if searchText == "" or button.Text:lower():find(searchText) then
+                        button.Visible = true
+                        button.Position = UDim2.new(0, 0, 0, order * 30) 
+                        order = order + 1
+                    else
+                        button.Visible = false
+                    end
+                end
+                scrollFrame.CanvasSize = UDim2.new(0, 0, 0, order * 30)
+            end)
             
             local isResizing = false
             local initialMousePosition, initialFrameSize
@@ -1062,12 +1105,13 @@ task.spawn(function()
         local transValue = 0.85
 
         if frame then
+            local searchBar = frame:FindFirstChild("SearchBar")
             local scrollFrame = frame:FindFirstChild("ScrollFrame")
             local resizeHandle = frame:FindFirstChild("ResizeHandle")
             
             frame.BackgroundTransparency = isTransparent and transValue or 0.2
             AnimationShowButton.BackgroundTransparency = isTransparent and transValue or 0.3
-            -- if searchBar then searchBar.BackgroundTransparency = isTransparent and transValue or 0 end -- [[ PERUBAHAN ]] Dihapus
+            if searchBar then searchBar.BackgroundTransparency = isTransparent and transValue or 0 end
             if scrollFrame then scrollFrame.BackgroundTransparency = isTransparent and transValue or 0 end
             if resizeHandle then resizeHandle.BackgroundTransparency = isTransparent and 0.9 or 0.5 end
 
@@ -1511,3 +1555,4 @@ task.spawn(function()
         reapplyFeaturesOnRespawn(LocalPlayer.Character)
     end
 end)
+
