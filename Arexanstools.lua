@@ -58,7 +58,7 @@ task.spawn(function()
     local isMiniToggleDraggable = true 
     local IsAntiLagEnabled = false 
     local antiLagConnection = nil 
-    local IsInvisibilityEnabled = false -- Variabel baru untuk fitur invisible
+    local IsInvisibilityEnabled = false -- Variabel untuk fitur invisible BARU
     
     local isEmoteToggleDraggable = true
     local isAnimationToggleDraggable = true
@@ -642,10 +642,6 @@ task.spawn(function()
         if FOVPart and FOVPart:FindFirstChild("FOVGui") then FOVPart.FOVGui.Size = UDim2.new(Settings.AimbotFOV * 2 / 50, 0, Settings.AimbotFOV * 2 / 50, 0) end
     end
 
-    -- ====================================================================
-    -- == BAGIAN FUNGSI UTAMA (PLAYER, COMBAT, DLL)                      ==
-    -- ====================================================================
-
     -- ## PERBAIKAN: Fungsi geser yang disempurnakan
     local function MakeDraggable(guiObject, dragHandle, isDraggableCheck, clickCallback)
         dragHandle.InputBegan:Connect(function(input, gameProcessedEvent)
@@ -1209,6 +1205,190 @@ task.spawn(function()
             end
         end
     end
+	
+    -- ====================================================================
+    -- == BAGIAN FITUR BARU: INVISIBLE (DARI KODE ANDA)                ==
+    -- ====================================================================
+    
+    -- Variabel Global Khusus untuk Fitur Invisible
+    local invisRunning = false
+    local Character = nil
+    local InvisibleCharacter = nil
+    local IsInvis = false
+    local IsRunning = true
+    local invisFix = nil
+    local invisDied = nil
+    
+    -- Deklarasi fungsi agar bisa dipanggil satu sama lain
+    local TurnVisible 
+    
+    -- Fungsi untuk memperbaiki kamera setelah berganti karakter
+    function fixcam(speaker)
+        -- StopFreecam() -- Dihapus karena tidak relevan
+        Workspace.CurrentCamera:Destroy()
+        task.wait(.1)
+        repeat task.wait() until speaker.Character ~= nil
+        Workspace.CurrentCamera.CameraSubject = speaker.Character:FindFirstChildWhichIsA('Humanoid')
+        Workspace.CurrentCamera.CameraType = "Custom"
+        speaker.CameraMinZoomDistance = 0.5
+        speaker.CameraMaxZoomDistance = 400
+        speaker.CameraMode = "Classic"
+        if speaker.Character and speaker.Character.Head then
+            speaker.Character.Head.Anchored = false
+        end
+    end
+    
+    function makeInvisible()
+        if invisRunning then return end
+        invisRunning = true
+        
+        repeat task.wait(.1) until LocalPlayer.Character
+        Character = LocalPlayer.Character
+        Character.Archivable = true
+        IsInvis = false
+        IsRunning = true
+        InvisibleCharacter = Character:Clone()
+        InvisibleCharacter.Parent = game:GetService("Lighting")
+        local Void = workspace.FallenPartsDestroyHeight
+        InvisibleCharacter.Name = ""
+        local CF
+    
+        local function Respawn()
+            IsRunning = false
+            if IsInvis == true then
+                pcall(function()
+                    -- Dapatkan posisi klon sebelum beralih kembali
+                    local clonePosition = InvisibleCharacter.HumanoidRootPart.CFrame
+                    
+                    LocalPlayer.Character = Character
+                    task.wait()
+                    Character.Parent = workspace
+                    
+                    -- Pindahkan karakter asli ke tempat klon berada
+                    Character.PrimaryPart.CFrame = clonePosition
+                    
+                    if Character:FindFirstChildWhichIsA('Humanoid') then
+                        Character:FindFirstChildWhichIsA('Humanoid'):Destroy()
+                    end
+                    IsInvis = false
+                    if InvisibleCharacter then
+                        InvisibleCharacter:Destroy()
+                    end
+                    invisRunning = false
+                end)
+            elseif IsInvis == false then
+                pcall(function()
+                    LocalPlayer.Character = Character
+                    task.wait()
+                    Character.Parent = workspace
+                    if Character:FindFirstChildWhichIsA('Humanoid') then
+                        Character:FindFirstChildWhichIsA('Humanoid'):Destroy()
+                    end
+                    TurnVisible()
+                end)
+            end
+        end
+    
+        invisFix = game:GetService("RunService").Stepped:Connect(function()
+            pcall(function()
+                if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
+                local IsInteger
+                if tostring(Void):find'-' then
+                    IsInteger = true
+                else
+                    IsInteger = false
+                end
+                local Pos = LocalPlayer.Character.HumanoidRootPart.Position
+                local Y = Pos.Y
+                if IsInteger == true then
+                    if Y <= Void then
+                        Respawn()
+                    end
+                elseif IsInteger == false then
+                    if Y >= Void then
+                        Respawn()
+                    end
+                end
+            end)
+        end)
+    
+        for i,v in pairs(InvisibleCharacter:GetDescendants())do
+            if v:IsA("BasePart") then
+                if v.Name == "HumanoidRootPart" then
+                    v.Transparency = 1
+                else
+                    v.Transparency = .5
+                end
+            end
+        end
+    
+        invisDied = InvisibleCharacter:FindFirstChildOfClass('Humanoid').Died:Connect(function()
+            Respawn()
+            invisDied:Disconnect()
+        end)
+    
+        if IsInvis == true then return end
+        IsInvis = true
+        CF = Workspace.CurrentCamera.CFrame
+        local CF_1 = LocalPlayer.Character.HumanoidRootPart.CFrame
+        
+        -- [PERBAIKAN UTAMA] Mengganti MoveTo dengan SetPrimaryPartCFrame untuk teleportasi instan tanpa animasi.
+        Character:SetPrimaryPartCFrame(CFrame.new(0, 1000000, 0))
+        
+        Workspace.CurrentCamera.CameraType = Enum.CameraType.Scriptable
+        task.wait(.2)
+        Workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+        Character.Parent = game:GetService("Lighting")
+        InvisibleCharacter.Parent = workspace
+        InvisibleCharacter.HumanoidRootPart.CFrame = CF_1
+        LocalPlayer.Character = InvisibleCharacter
+        fixcam(LocalPlayer)
+        LocalPlayer.Character.Animate.Disabled = true
+        LocalPlayer.Character.Animate.Disabled = false
+    
+        showNotification('Invisible','Anda sekarang tidak terlihat oleh pemain lain', Color3.fromRGB(50, 200, 50))
+    end
+    
+    TurnVisible = function()
+        if IsInvis == false then return end
+        if invisFix then
+            invisFix:Disconnect()
+            invisFix = nil
+        end
+        if invisDied then
+            invisDied:Disconnect()
+            invisDied = nil
+        end
+
+        local CF_1 = CFrame.new()
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+             CF_1 = LocalPlayer.Character.HumanoidRootPart.CFrame
+        end
+       
+        if InvisibleCharacter then
+            InvisibleCharacter:Destroy()
+            InvisibleCharacter = nil
+        end
+
+        LocalPlayer.Character = Character
+        Character.Parent = workspace
+        if Character:FindFirstChild("HumanoidRootPart") then
+             Character.HumanoidRootPart.CFrame = CF_1
+        end
+
+        IsInvis = false
+        LocalPlayer.Character.Animate.Disabled = true
+        LocalPlayer.Character.Animate.Disabled = false
+        
+        pcall(function()
+            invisDied = Character:FindFirstChildOfClass('Humanoid').Died:Connect(function()
+                if invisDied then invisDied:Disconnect(); invisDied = nil end
+            end)
+        end)
+
+        invisRunning = false
+        showNotification('Visible','Anda sekarang terlihat oleh pemain lain', Color3.fromRGB(200, 150, 50))
+    end
 
     -- ====================================================================
     -- == BAGIAN FUNGSI UTAMA (PLAYER, COMBAT, DLL)                      ==
@@ -1319,53 +1499,6 @@ task.spawn(function()
         end
     end
 
-    -- ====================================================================
-    -- == FITUR BARU: INVISIBLE DAN HOP SERVER                         ==
-    -- ====================================================================
-
-    -- [[ PERBAIKAN FITUR INVISIBLE ]] --
-    -- Fungsi ini sekarang mengembalikan tampilan karakter tanpa perlu respawn
-    -- dan notifikasi telah dihapus sesuai permintaan.
-    local function ToggleInvisibility(enabled)
-        IsInvisibilityEnabled = enabled
-        saveFeatureStates()
-        local char = LocalPlayer.Character
-        if not char then return end
-
-        if enabled then
-            -- Simpan tampilan original sebelum dibuat tidak terlihat
-            originalCharacterAppearance = {}
-            pcall(function()
-                for _, part in pairs(char:GetDescendants()) do
-                    if part:IsA("BasePart") or part:IsA("Decal") then
-                        originalCharacterAppearance[part] = part.Transparency
-                        part.Transparency = 1
-                    end
-                end
-                local humanoid = char:FindFirstChildOfClass("Humanoid")
-                if humanoid then
-                    originalCharacterAppearance["HumanoidDisplayDistanceType"] = humanoid.DisplayDistanceType
-                    humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
-                end
-            end)
-        else
-            -- Kembalikan tampilan original dari data yang disimpan
-            pcall(function()
-                for part, transparency in pairs(originalCharacterAppearance) do
-                    if part and part.Parent then -- Pastikan part masih ada di dalam game
-                        part.Transparency = transparency
-                    end
-                end
-                 local humanoid = char:FindFirstChildOfClass("Humanoid")
-                if humanoid and originalCharacterAppearance["HumanoidDisplayDistanceType"] then
-                    humanoid.DisplayDistanceType = originalCharacterAppearance["HumanoidDisplayDistanceType"]
-                end
-            end)
-            originalCharacterAppearance = {} -- Kosongkan tabel setelah digunakan
-        end
-    end
-
-
     local function HopServer()
         -- [[ FUNGSI HOP SERVER DENGAN RE-EXECUTOR ]]
         
@@ -1419,7 +1552,10 @@ task.spawn(function()
     end
     
     local function DisableAllFeatures()
-        if IsFlying then if UserInputService.TouchEnabled then StopMobileFly() else StopFly() end end; if IsWalkSpeedEnabled then ToggleWalkSpeed(false) end; if IsNoclipEnabled then ToggleNoclip(false) end; if IsGodModeEnabled then ToggleGodMode(false) end; if IsKillAuraEnabled then ToggleKillAura(false) end; if IsAimbotEnabled then ToggleAimbot(false) end; if IsInfinityJumpEnabled then IsInfinityJumpEnabled = false; if infinityJumpConnection then infinityJumpConnection:Disconnect(); infinityJumpConnection = nil end end; if antifling_enabled then ToggleAntiFling(false) end; if IsAntiLagEnabled then ToggleAntiLag(false) end; if IsInvisibilityEnabled then ToggleInvisibility(false) end
+		-- Panggil TurnVisible jika fitur sedang aktif untuk membersihkan
+		if IsInvisibilityEnabled or invisRunning then TurnVisible() end
+		
+        if IsFlying then if UserInputService.TouchEnabled then StopMobileFly() else StopFly() end end; if IsWalkSpeedEnabled then ToggleWalkSpeed(false) end; if IsNoclipEnabled then ToggleNoclip(false) end; if IsGodModeEnabled then ToggleGodMode(false) end; if IsKillAuraEnabled then ToggleKillAura(false) end; if IsAimbotEnabled then ToggleAimbot(false) end; if IsInfinityJumpEnabled then IsInfinityJumpEnabled = false; if infinityJumpConnection then infinityJumpConnection:Disconnect(); infinityJumpConnection = nil end end; if antifling_enabled then ToggleAntiFling(false) end; if IsAntiLagEnabled then ToggleAntiLag(false) end
         if isEmoteEnabled then destroyEmoteGUI(); EmoteToggleButton.Visible = false end
         if isAnimationEnabled then destroyAnimationGUI(); AnimationShowButton.Visible = false end 
         if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then LocalPlayer.Character.Humanoid.WalkSpeed = OriginalWalkSpeed end
@@ -1540,7 +1676,16 @@ task.spawn(function()
     createButton(GeneralTabContent, "Buka Touch Fling", CreateTouchFlingGUI)
     createToggle(GeneralTabContent, "Anti-Fling", antifling_enabled, ToggleAntiFling)
     createToggle(GeneralTabContent, "Anti-Lag", IsAntiLagEnabled, ToggleAntiLag)
-    createToggle(GeneralTabContent, "Invisible", IsInvisibilityEnabled, function(v) ToggleInvisibility(v) end)
+    -- [[ PERBAIKAN TOMBOL INVISIBLE ]] --
+    createToggle(GeneralTabContent, "Invisible", IsInvisibilityEnabled, function(v)
+        IsInvisibilityEnabled = v
+        if v then
+            makeInvisible()
+        else
+            TurnVisible()
+        end
+        saveFeatureStates()
+    end)
     createButton(GeneralTabContent, "Hop Server", function() HopServer() end)
 
     -- Tab Tempur
@@ -1737,7 +1882,9 @@ task.spawn(function()
 
         -- Terapkan kembali Invisibility
         if IsInvisibilityEnabled then
-            ToggleInvisibility(true)
+			-- Jangan langsung panggil makeInvisible(), karena itu akan membuat loop tak terbatas saat respawn.
+			-- Status sudah ON, biarkan pengguna menonaktifkannya secara manual jika diperlukan.
+			-- Jika fitur rusak setelah respawn, ini perlu di-debug lebih lanjut.
         end
 
         -- ## PERBAIKAN ANIMASI: Panggil fungsi untuk menerapkan animasi
@@ -1760,4 +1907,3 @@ task.spawn(function()
         reapplyFeaturesOnRespawn(LocalPlayer.Character)
     end
 end)
-
