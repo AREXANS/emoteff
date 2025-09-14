@@ -1,12 +1,12 @@
 [
   {
     "username": "Arexans",
-    "key": "Axstools",
+    "password": "Axstools",
     "expiresAt": "9999-12-31T23:59:59.000Z"
   },
   {
     "username": "Yudi",
-    "key": "Axstools-prmnnt2-yudike",
+    "password": "Axstools-prmnnt2-yudike",
     "expiresAt": "9999-12-31T23:59:59.000Z"
   }
 ]
