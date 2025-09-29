@@ -357,11 +357,10 @@ task.spawn(function()
     -- [[ FUNGSI DRAGGABLE YANG DI-REFACTOR UNTUK KENYAMANAN PENGGUNA ]] --
     local function MakeDraggable(guiObject, dragHandle, isDraggableCheck, clickCallback)
         local UserInputService = game:GetService("UserInputService")
-        local isDragging = false
+        local dragInput = nil
         local dragStart = nil
         local startPos = nil
         local wasDragged = false
-        local dragInputType = nil
 
         ConnectEvent(dragHandle.InputBegan, function(input)
             if not (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then return end
@@ -370,28 +369,26 @@ task.spawn(function()
                 if clickCallback then
                     -- Periksa lagi untuk memastikan ini bukan event yang tidak diinginkan
                     local timeSinceBegan = tick()
-                    local endedConn
-                    endedConn = UserInputService.InputEnded:Connect(function(endInput)
+                    local endedConn = UserInputService.InputEnded:Connect(function(endInput)
                         if endInput.UserInputType == input.UserInputType then
                             if tick() - timeSinceBegan < 0.2 then -- Hanya panggil jika itu klik cepat
                                 clickCallback()
                             end
-                            if endedConn then endedConn:Disconnect() end
+                            endedConn:Disconnect()
                         end
                     end)
                 end
                 return
             end
             
-            isDragging = true
-            dragInputType = input.UserInputType
+            dragInput = input
             dragStart = input.Position
             startPos = guiObject.Position
             wasDragged = false
         end)
 
         ConnectEvent(UserInputService.InputChanged, function(input)
-            if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            if input == dragInput then
                 local newPos = input.Position
                 local delta = newPos - dragStart
                 guiObject.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
@@ -402,7 +399,7 @@ task.spawn(function()
         end)
 
         ConnectEvent(UserInputService.InputEnded, function(input)
-            if isDragging and input.UserInputType == dragInputType then
+            if input == dragInput then
                 if not wasDragged and clickCallback then
                     clickCallback()
                 end
@@ -410,8 +407,7 @@ task.spawn(function()
                 if wasDragged and saveGuiPositions then
                     pcall(saveGuiPositions)
                 end
-                isDragging = false
-                dragInputType = nil
+                dragInput = nil
             end
         end)
     end
@@ -4610,7 +4606,11 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
     end)
     
     ConnectEvent(UserInputService.InputBegan, function(input, processed)
-        if processed then return end; if input.KeyCode == Enum.KeyCode.F and not UserInputService.TouchEnabled then if not IsFlying then StartFly() else StopFly() end end 
+        if processed then return end
+        if input.KeyCode == Enum.KeyCode.F1 then
+            MiniToggleContainer.Visible = not MiniToggleContainer.Visible
+        end
+        if input.KeyCode == Enum.KeyCode.F and not UserInputService.TouchEnabled then if not IsFlying then StartFly() else StopFly() end end
     end)
     
     local function applyAllAnimations(character)
