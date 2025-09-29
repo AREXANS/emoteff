@@ -357,10 +357,11 @@ task.spawn(function()
     -- [[ FUNGSI DRAGGABLE YANG DI-REFACTOR UNTUK KENYAMANAN PENGGUNA ]] --
     local function MakeDraggable(guiObject, dragHandle, isDraggableCheck, clickCallback)
         local UserInputService = game:GetService("UserInputService")
-        local dragInput = nil
+        local isDragging = false
         local dragStart = nil
         local startPos = nil
         local wasDragged = false
+        local dragInputType = nil
 
         ConnectEvent(dragHandle.InputBegan, function(input)
             if not (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then return end
@@ -369,26 +370,28 @@ task.spawn(function()
                 if clickCallback then
                     -- Periksa lagi untuk memastikan ini bukan event yang tidak diinginkan
                     local timeSinceBegan = tick()
-                    local endedConn = UserInputService.InputEnded:Connect(function(endInput)
+                    local endedConn
+                    endedConn = UserInputService.InputEnded:Connect(function(endInput)
                         if endInput.UserInputType == input.UserInputType then
                             if tick() - timeSinceBegan < 0.2 then -- Hanya panggil jika itu klik cepat
                                 clickCallback()
                             end
-                            endedConn:Disconnect()
+                            if endedConn then endedConn:Disconnect() end
                         end
                     end)
                 end
                 return
             end
             
-            dragInput = input
+            isDragging = true
+            dragInputType = input.UserInputType
             dragStart = input.Position
             startPos = guiObject.Position
             wasDragged = false
         end)
 
         ConnectEvent(UserInputService.InputChanged, function(input)
-            if input == dragInput then
+            if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
                 local newPos = input.Position
                 local delta = newPos - dragStart
                 guiObject.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
@@ -399,7 +402,7 @@ task.spawn(function()
         end)
 
         ConnectEvent(UserInputService.InputEnded, function(input)
-            if input == dragInput then
+            if isDragging and input.UserInputType == dragInputType then
                 if not wasDragged and clickCallback then
                     clickCallback()
                 end
@@ -407,7 +410,8 @@ task.spawn(function()
                 if wasDragged and saveGuiPositions then
                     pcall(saveGuiPositions)
                 end
-                dragInput = nil
+                isDragging = false
+                dragInputType = nil
             end
         end)
     end
