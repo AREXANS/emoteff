@@ -364,17 +364,19 @@ task.spawn(function()
 
         ConnectEvent(dragHandle.InputBegan, function(input)
             if not (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then return end
+            if dragInput then return end
 
             if isDraggableCheck and not isDraggableCheck() then
                 if clickCallback then
                     -- Periksa lagi untuk memastikan ini bukan event yang tidak diinginkan
                     local timeSinceBegan = tick()
-                    local endedConn = UserInputService.InputEnded:Connect(function(endInput)
+                    local endedConn
+                    endedConn = UserInputService.InputEnded:Connect(function(endInput)
                         if endInput.UserInputType == input.UserInputType then
                             if tick() - timeSinceBegan < 0.2 then -- Hanya panggil jika itu klik cepat
                                 clickCallback()
                             end
-                            endedConn:Disconnect()
+                            if endedConn then endedConn:Disconnect() end
                         end
                     end)
                 end
@@ -388,7 +390,7 @@ task.spawn(function()
         end)
 
         ConnectEvent(UserInputService.InputChanged, function(input)
-            if input == dragInput then
+            if dragInput and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
                 local newPos = input.Position
                 local delta = newPos - dragStart
                 guiObject.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
@@ -399,7 +401,7 @@ task.spawn(function()
         end)
 
         ConnectEvent(UserInputService.InputEnded, function(input)
-            if input == dragInput then
+            if dragInput and input.UserInputType == dragInput.UserInputType then
                 if not wasDragged and clickCallback then
                     clickCallback()
                 end
@@ -4607,9 +4609,6 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
     
     ConnectEvent(UserInputService.InputBegan, function(input, processed)
         if processed then return end
-        if input.KeyCode == Enum.KeyCode.F1 then
-            MiniToggleContainer.Visible = not MiniToggleContainer.Visible
-        end
         if input.KeyCode == Enum.KeyCode.F and not UserInputService.TouchEnabled then if not IsFlying then StartFly() else StopFly() end end
     end)
     
