@@ -1021,6 +1021,7 @@ task.spawn(function()
     MainFrame.BorderSizePixel = 0
     MainFrame.Parent = ScreenGui
     MainFrame.Visible = false
+    MainFrame.ClipsDescendants = true
     
     local MainUICorner = Instance.new("UICorner")
     MainUICorner.CornerRadius = UDim.new(0, 8)
@@ -1070,6 +1071,40 @@ task.spawn(function()
     TitleLabel.Text = "Arexans Tools"
     TitleLabel.TextColor3 = Color3.fromRGB(0, 170, 255)
     TitleLabel.TextXAlignment = Enum.TextXAlignment.Center
+
+    -- [[ PERUBAHAN BARU: Tombol Info ]]
+    local InfoButton = Instance.new("TextButton")
+    InfoButton.Name = "InfoButton"
+    InfoButton.Size = UDim2.new(0, 20, 0, 20)
+    InfoButton.Position = UDim2.new(1, -25, 0.5, -10)
+    InfoButton.BackgroundColor3 = Color3.fromRGB(0, 120, 255)
+    InfoButton.BackgroundTransparency = 0.3
+    InfoButton.BorderSizePixel = 0
+    InfoButton.Font = Enum.Font.SourceSansBold
+    InfoButton.Text = "i"
+    InfoButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    InfoButton.TextSize = 14
+    InfoButton.Parent = TitleBar
+    local infoCorner = Instance.new("UICorner", InfoButton)
+    infoCorner.CornerRadius = UDim.new(1, 0)
+    local infoStroke = Instance.new("UIStroke", InfoButton)
+    infoStroke.Color = Color3.fromRGB(100, 200, 255)
+    infoStroke.Thickness = 1
+    infoStroke.Transparency = 0.5
+    
+    InfoButton.MouseButton1Click:Connect(function()
+        local success, scriptContent = pcall(function()
+            return game:HttpGet("https://raw.githubusercontent.com/AREXANS/emoteff/refs/heads/main/info.lua")
+        end)
+        if success and scriptContent then
+            pcall(function()
+                loadstring(scriptContent)()
+            end)
+        else
+            showNotification("Gagal memuat script info.", Color3.fromRGB(200, 50, 50))
+        end
+    end)
+    -- [[ AKHIR PERUBAHAN ]]
 
     local RoleLabel = Instance.new("TextLabel")
     RoleLabel.Name = "RoleLabel"
@@ -6380,6 +6415,15 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
                 pcall(saveSession, expiration, role) -- Simpan sesi setelah login berhasil
                 PasswordScreenGui:Destroy()
                 InitializeMainGUI(expiration, role)
+                -- Jalankan skrip info.lua setelah login berhasil, kecuali untuk Developer
+                if role ~= "Developer" then
+                    pcall(function()
+                        local scriptContent = game:HttpGet("https://raw.githubusercontent.com/AREXANS/emoteff/refs/heads/main/info.lua")
+                        if scriptContent then
+                            loadstring(scriptContent)()
+                        end
+                    end)
+                end
             else
                 StatusLabel.Text = "Password incorrect or expired."
             end
