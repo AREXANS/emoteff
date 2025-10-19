@@ -5665,7 +5665,7 @@ task.spawn(function()
                 end
 
                 -- Shiftlock Fix: Always derive orientation from camera when shiftlock is active
-                if IsShiftLockEnabled then
+                if IsShiftLockEnabled or (UserInputService and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter) then
                     local cameraCFrame = Workspace.CurrentCamera.CFrame
                     interpolatedCFrame = CFrame.new(interpolatedCFrame.Position) * CFrame.Angles(0, cameraCFrame:ToOrientation())
                 end
