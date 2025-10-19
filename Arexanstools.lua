@@ -747,61 +747,6 @@ task.spawn(function()
     local PlayerListLayout, GeneralListLayout, TeleportListLayout, VipListLayout, SettingsListLayout, RekamanListLayout
     local setupPlayerTab, setupGeneralTab, setupTeleportTab, setupVipTab, setupSettingsTab, setupRekamanTab
 
-    -- [[ IMPLEMENTASI BARU: Fungsi untuk Indikator Perekaman ]]
-    local function showRecordingIndicator()
-        -- Hapus indikator lama jika ada
-        if game:GetService("CoreGui"):FindFirstChild("RecordingIndicatorGUI") then
-            game:GetService("CoreGui"):FindFirstChild("RecordingIndicatorGUI"):Destroy()
-        end
-
-        local indicatorGui = Instance.new("ScreenGui", CoreGui)
-        indicatorGui.Name = "RecordingIndicatorGUI"
-        indicatorGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-        indicatorGui.DisplayOrder = 99
-
-        -- Frame kontainer untuk menampung ikon dan teks
-        local container = Instance.new("Frame", indicatorGui)
-        container.BackgroundTransparency = 1
-        container.Position = UDim2.new(0, 30, 0.15, 0) -- Dipindahkan lebih ke atas dan ke kanan
-        container.Size = UDim2.new(0, 120, 0, 25) 
-        container.AnchorPoint = Vector2.new(0, 0.5)
-
-        local layout = Instance.new("UIListLayout", container)
-        layout.FillDirection = Enum.FillDirection.Horizontal
-        layout.VerticalAlignment = Enum.VerticalAlignment.Center
-        layout.Padding = UDim.new(0, 8) -- Jarak antara ikon dan teks
-
-        -- Ikon bulat merah (diperkecil)
-        local indicatorIcon = Instance.new("Frame", container)
-        indicatorIcon.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-        indicatorIcon.BorderSizePixel = 0
-        indicatorIcon.Size = UDim2.new(0, 15, 0, 15) -- Ukuran lebih kecil
-
-        local corner = Instance.new("UICorner", indicatorIcon)
-        corner.CornerRadius = UDim.new(1, 0)
-
-        local stroke = Instance.new("UIStroke", indicatorIcon)
-        stroke.Color = Color3.fromRGB(255, 255, 255)
-        stroke.Thickness = 1
-        stroke.Transparency = 0.5
-
-        -- Teks "Recording..."
-        local indicatorLabel = Instance.new("TextLabel", container)
-        indicatorLabel.BackgroundTransparency = 1
-        indicatorLabel.Font = Enum.Font.SourceSansBold
-        indicatorLabel.Text = "Recording..."
-        indicatorLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        indicatorLabel.TextSize = 16
-        indicatorLabel.TextXAlignment = Enum.TextXAlignment.Left
-        indicatorLabel.Size = UDim2.new(0, 100, 1, 0)
-    end
-
-    local function hideRecordingIndicator()
-        if CoreGui:FindFirstChild("RecordingIndicatorGUI") then
-            CoreGui:FindFirstChild("RecordingIndicatorGUI"):Destroy()
-        end
-    end
-
     local function InitializeMainGUI(expirationTimestamp, userRole)
         currentUserRole = userRole
         -- Layanan dan Variabel Global
@@ -5402,6 +5347,26 @@ task.spawn(function()
             targetPlayer = targetPlayer or LocalPlayer -- Default ke diri sendiri jika tidak ada target
             currentRecordingTarget = targetPlayer
 
+            -- GUI Indikator Perekaman
+            local recordingIndicatorGui = Instance.new("ScreenGui", CoreGui)
+            recordingIndicatorGui.Name = "RecordingIndicatorGUI"
+            recordingIndicatorGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+            recordingIndicatorGui.DisplayOrder = 99
+            local indicatorFrame = Instance.new("Frame", recordingIndicatorGui)
+            indicatorFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+            indicatorFrame.BackgroundTransparency = 0.5
+            indicatorFrame.Position = UDim2.new(0, 30, 0.15, 0)
+            indicatorFrame.Size = UDim2.new(0, 110, 0, 25)
+            local indicatorCorner = Instance.new("UICorner", indicatorFrame)
+            indicatorCorner.CornerRadius = UDim.new(0, 8)
+            local indicatorLabel = Instance.new("TextLabel", indicatorFrame)
+            indicatorLabel.Size = UDim2.new(1, 0, 1, 0)
+            indicatorLabel.BackgroundTransparency = 1
+            indicatorLabel.Font = Enum.Font.SourceSansBold
+            indicatorLabel.Text = "⏺ Recording..."
+            indicatorLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+            indicatorLabel.TextSize = 14
+
             local char = targetPlayer.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
             local humanoid = char and char:FindFirstChildOfClass("Humanoid")
@@ -5416,7 +5381,6 @@ task.spawn(function()
             currentRecordingData = {}
             local startTime = tick()
             recStatusLabel.Text = "Merekam: " .. targetPlayer.DisplayName .. " 🔴"
-            showRecordingIndicator()
             
             recordButton.Text = "⏹️"
             recordButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
@@ -5467,8 +5431,13 @@ task.spawn(function()
             if not isRecording then return end
             isRecording = false
             if recordingConnection then recordingConnection:Disconnect(); recordingConnection = nil end
-            hideRecordingIndicator()
             
+            -- Hapus GUI Indikator Perekaman
+            local indicatorGui = CoreGui:FindFirstChild("RecordingIndicatorGUI")
+            if indicatorGui then
+                indicatorGui:Destroy()
+            end
+
             if #currentRecordingData > 1 then
                 local baseName = (currentRecordingTarget and currentRecordingTarget.Name ~= LocalPlayer.Name) and "Rekaman " .. currentRecordingTarget.Name or "Rekaman Diri"
                 local newName, i = baseName .. " 1", 1
@@ -5577,15 +5546,14 @@ task.spawn(function()
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
             local humanoid = char and char:FindFirstChildOfClass("Humanoid")
             if not (hrp and humanoid) then if onComplete then onComplete() end; return end
-            
+        
             originalPlaybackWalkSpeed = humanoid.WalkSpeed
-        -- Mark playback active and ensure Animate script is enabled so it can auto-switch walk/run
-        IsPlaybackActive = true
-        local animateScript = char and char:FindFirstChild("Animate")
-        if animateScript then
-            savedAnimateDisabled = animateScript.Disabled
-            pcall(function() animateScript.Disabled = false end)
-        end
+            IsPlaybackActive = true
+            local animateScript = char and char:FindFirstChild("Animate")
+            if animateScript then
+                savedAnimateDisabled = animateScript.Disabled
+                pcall(function() animateScript.Disabled = false end)
+            end
         
             local recordingData = recordingObject.frames or recordingObject
             if not recordingData or #recordingData < 1 then if onComplete then onComplete() end; return end
@@ -5594,9 +5562,8 @@ task.spawn(function()
             if recordingDuration <= 0 then if onComplete then onComplete() end; return end
         
             local animationCache = {}
-            playbackMovers = {} -- Reset movers for this specific playback
-            
-            -- Create CFrame movers for all modes (used for jumps/falls in bypass)
+            playbackMovers = {}
+        
             pcall(function()
                 local attachment = Instance.new("Attachment", hrp); attachment.Name = "ReplayAttachment"
                 local alignPos = Instance.new("AlignPosition", attachment); alignPos.Attachment0 = attachment; alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment; alignPos.Responsiveness = 200; alignPos.MaxForce = 100000
@@ -5605,33 +5572,22 @@ task.spawn(function()
                 playbackMovers.alignPos = alignPos
                 playbackMovers.alignOrient = alignOrient
             end)
-
+        
             if isAnimationBypassEnabled then
-                -- In bypass mode, also create the guide part for running
                 pcall(function()
-                    local guidePart = Instance.new("Part")
-                    guidePart.Name = "PlaybackGuidePart"
-                    guidePart.Size = Vector3.new(1,1,1)
-                    guidePart.Transparency = 1
-                    guidePart.CanCollide = false
-                    guidePart.Anchored = true
-                    guidePart.Parent = workspace
+                    local guidePart = Instance.new("Part"); guidePart.Name = "PlaybackGuidePart"; guidePart.Size = Vector3.new(1,1,1); guidePart.Transparency = 1; guidePart.CanCollide = false; guidePart.Anchored = true; guidePart.Parent = workspace
                     playbackMovers.guidePart = guidePart
                 end)
             end
-
+        
             local soundJumping, soundLanding, customRunningSound
             pcall(function()
                 soundJumping = hrp:FindFirstChild("Jumping")
                 soundLanding = hrp:FindFirstChild("FreeFalling")
-                customRunningSound = Instance.new("Sound", hrp)
-                customRunningSound.Name = "CustomRunningSound"
-                customRunningSound.Looped = true
+                customRunningSound = Instance.new("Sound", hrp); customRunningSound.Name = "CustomRunningSound"; customRunningSound.Looped = true
                 local originalRunningSound = hrp:FindFirstChild("Running")
                 if originalRunningSound and originalRunningSound:IsA("Sound") then
-                    customRunningSound.SoundId = originalRunningSound.SoundId
-                    customRunningSound.Volume = originalRunningSound.Volume
-                    customRunningSound.Pitch = originalRunningSound.Pitch
+                    customRunningSound.SoundId = originalRunningSound.SoundId; customRunningSound.Volume = originalRunningSound.Volume; customRunningSound.Pitch = originalRunningSound.Pitch
                 else
                     customRunningSound.SoundId = "rbxassetid://122226169"
                 end
@@ -5647,22 +5603,19 @@ task.spawn(function()
                     if playbackConnection then playbackConnection:Disconnect(); playbackConnection = nil end
                     return 
                 end
-
+        
                 if isPaused then
                     if not wasPaused then 
                         if playbackMovers.alignPos then playbackMovers.alignPos.MaxForce = 0 end
                         if playbackMovers.alignOrient then playbackMovers.alignOrient.MaxTorque = 0 end
                         if customRunningSound and customRunningSound.IsPlaying then customRunningSound:Stop() end
-                        
-                        for id, track in pairs(animationCache) do
-                            if track.IsPlaying then track:Stop(0.1) end
-                        end
+                        for _, track in pairs(animationCache) do if track.IsPlaying then track:Stop(0.1) end end
                         wasPaused = true
                     end
                     loopStartTime = loopStartTime + dt 
                     return 
                 end
-
+        
                 if wasPaused then 
                     if playbackMovers.alignPos then playbackMovers.alignPos.MaxForce = 100000 end
                     if playbackMovers.alignOrient then playbackMovers.alignOrient.MaxTorque = 100000 end
@@ -5672,14 +5625,9 @@ task.spawn(function()
                 local elapsedTime = tick() - loopStartTime
                 
                 if elapsedTime >= recordingDuration then
-                    if playbackConnection then
-                        playbackConnection:Disconnect()
-                        playbackConnection = nil
-                    end
-                    cleanupSinglePlayback(onComplete ~= nil) -- [[ PERBAIKAN ]]: Teruskan true jika ada callback 'onComplete' (artinya ini adalah sekuens)
-                    if onComplete then
-                        onComplete() -- Panggil callback untuk melanjutkan ke rekaman berikutnya.
-                    end
+                    if playbackConnection then playbackConnection:Disconnect(); playbackConnection = nil end
+                    cleanupSinglePlayback(onComplete ~= nil)
+                    if onComplete then onComplete() end
                     return
                 end
                 
@@ -5704,44 +5652,35 @@ task.spawn(function()
                 local velocity = 0
                 local timeDelta = frameToPlay.time - currentFrame.time
                 if timeDelta > 0.001 then
-                    local distanceDelta = (cframeToPlay.Position - cframeCurrent.Position).Magnitude
-                    velocity = distanceDelta / timeDelta
+                    velocity = (cframeToPlay.Position - cframeCurrent.Position).Magnitude / timeDelta
                 end
                 
                 local interpolatedCFrame
                 if frameToPlay.isTeleport then
-                    if not isAnimationBypassEnabled then hrp.CFrame = cframeToPlay end
                     interpolatedCFrame = cframeToPlay
                     loopStartTime = tick() - frameToPlay.time
                 else
-                    local alpha = (elapsedTime - currentFrame.time) / (frameToPlay.time - currentFrame.time)
-                    alpha = math.clamp(alpha, 0, 1)
+                    local alpha = math.clamp((elapsedTime - currentFrame.time) / timeDelta, 0, 1)
                     interpolatedCFrame = cframeCurrent:Lerp(cframeToPlay, alpha)
+                end
+
+                -- Shiftlock Fix: Always derive orientation from camera when shiftlock is active
+                if IsShiftLockEnabled then
+                    local cameraCFrame = Workspace.CurrentCamera.CFrame
+                    interpolatedCFrame = CFrame.new(interpolatedCFrame.Position) * CFrame.Angles(0, cameraCFrame:ToOrientation())
                 end
 
                 local currentState = currentFrame.state
                 
-                -- ✅ SHIFTLOCK PLAYBACK FIX V2
-                local targetOrientationCFrame = interpolatedCFrame
-                if IsShiftLockEnabled then
-                    local cameraLookVector = Workspace.CurrentCamera.CFrame.LookVector
-                    local lookAtPosition = interpolatedCFrame.Position + Vector3.new(cameraLookVector.X, 0, cameraLookVector.Z)
-                    targetOrientationCFrame = CFrame.new(interpolatedCFrame.Position, lookAtPosition)
-                end
-
                 if not isAnimationBypassEnabled then
                     if playbackMovers.alignPos then
                         playbackMovers.alignPos.Position = interpolatedCFrame.Position
-                        playbackMovers.alignOrient.CFrame = targetOrientationCFrame
+                        playbackMovers.alignOrient.CFrame = interpolatedCFrame
                     end
                     humanoid.WalkSpeed = originalPlaybackWalkSpeed
-
-                    local animFrame = currentFrame
+        
                     local requiredAnims = {}
-                    local runAnimId = lastAnimations.Run
-                    local animationSpeed = velocity / (originalPlaybackWalkSpeed > 0 and originalPlaybackWalkSpeed or 16)
-                    
-                    for _, animData in ipairs(animFrame.anims) do
+                    for _, animData in ipairs(currentFrame.anims) do
                         requiredAnims[animData.id] = animData.time
                         if not animationCache[animData.id] then
                             local anim = Instance.new("Animation"); anim.AnimationId = animData.id
@@ -5749,36 +5688,25 @@ task.spawn(function()
                         end
                         local track = animationCache[animData.id]
                         if not track.IsPlaying then track:Play(0.1) end
-                        
-                        if animData.id == runAnimId and velocity > 1 then
-                            track:AdjustSpeed(animationSpeed)
-                        else
-                            track:AdjustSpeed(1)
-                        end
+                        track:AdjustSpeed(velocity / (originalPlaybackWalkSpeed > 0 and originalPlaybackWalkSpeed or 16))
                         track.TimePosition = animData.time
                     end
                     for id, track in pairs(animationCache) do
                         if not requiredAnims[id] and track.IsPlaying then track:Stop(0.1) end
                     end
-                else -- [[ PERBAIKAN: Logika bypass disederhanakan untuk menghilangkan stutter ]]
-                    -- Selalu gunakan AlignPosition dan AlignOrientation untuk pergerakan yang mulus.
-                    -- Menghilangkan pergantian antara MoveTo dan physics movers yang menyebabkan glitch.
+                else
                     if playbackMovers.alignPos then
-                        playbackMovers.alignPos.MaxForce = 100000
-                        playbackMovers.alignOrient.MaxTorque = 100000
                         playbackMovers.alignPos.Position = interpolatedCFrame.Position
-                        playbackMovers.alignOrient.CFrame = targetOrientationCFrame
+                        playbackMovers.alignOrient.CFrame = interpolatedCFrame
                     end
-                    
-                    -- Hapus semua animasi yang sedang berjalan dari pemutaran sebelumnya untuk memastikan
-                    -- hanya animasi dari Animate script yang berjalan.
                     if next(animationCache) then
                         for id, track in pairs(animationCache) do
-                            if track.IsPlaying then track:Stop(0) end; animationCache[id] = nil
+                            if track.IsPlaying then track:Stop(0) end
+                            animationCache[id] = nil
                         end
                     end
                 end
-
+        
                 pcall(function()
                     if currentState and currentState ~= lastPlayerState then
                         local stateName = currentState:match("Enum.HumanoidStateType%.(.*)")
@@ -6206,17 +6134,11 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
     end)
     
     ConnectEvent(UserInputService.InputBegan, function(input, processed)
-        if processed then return end
-        if input.KeyCode == Enum.KeyCode.F and not UserInputService.TouchEnabled then if not IsFlying then StartFly() else StopFly() end end
-    end)
+        if processed or UserInputService:GetFocusedTextBox() then return end
 
-    -- [[ IMPLEMENTASI BARU: Keybind 'R' untuk Merekam ]]
-    ConnectEvent(UserInputService.InputBegan, function(input, processed)
-        if processed then return end
-        -- Pastikan pengguna tidak sedang mengetik di textbox
-        if UserInputService:GetFocusedTextBox() then return end
-
-        if input.KeyCode == Enum.KeyCode.R then
+        if input.KeyCode == Enum.KeyCode.F and not UserInputService.TouchEnabled then
+            if not IsFlying then StartFly() else StopFly() end
+        elseif input.KeyCode == Enum.KeyCode.R then
             if isRecording then
                 stopRecording()
             else
@@ -7131,6 +7053,71 @@ function playNextRecording()
 end
 
 -- Main smooth playback loop that will override previous loops
+do
+    -- disconnect previous connection if it exists (best-effort: tries to find stored connection variable)
+    if playbackConnection and type(playbackConnection.Disconnect) == "function" then
+        pcall(function() playbackConnection:Disconnect() end)
+    end
+
+    playbackConnection = RunService.RenderStepped:Connect(function(dt)
+        if isPaused or isSmoothPaused then return end
+        if IsPlaybackActive then return end
+        if not _player then return end
+        local char = _player.Character
+        if not char then return end
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        local rootPart = char:FindFirstChild("HumanoidRootPart")
+        if humanoid and rootPart and currentFrame and nextFrame then
+            local ok, cf1 = pcall(function() return CFrame.new(unpack(currentFrame.cframe)) end)
+            local ok2, cf2 = pcall(function() return CFrame.new(unpack(nextFrame.cframe)) end)
+            if not ok or not ok2 or not cf1 or not cf2 then return end
+
+            local pos1, pos2 = cf1.Position, cf2.Position
+            local dist = (pos2 - pos1).Magnitude
+            local timeDelta = math.max((nextFrame.time or 0) - (currentFrame.time or 0), 0.016)
+            local dynamicSpeed = math.clamp((dist / timeDelta) * 1.15, 6, 22)
+
+            -- apply movement speed
+            pcall(function() humanoid.WalkSpeed = dynamicSpeed end)
+
+            -- handle jump/freefall states based on vertical delta
+            local heightDelta = pos2.Y - pos1.Y
+            if heightDelta > 2 then
+                pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end)
+            elseif heightDelta < -2 then
+                pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Freefall) end)
+            else
+                -- Do not force Running here; let Animate select Walk vs Run based on WalkSpeed
+                if isAnimationBypassEnabled then
+                    pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Running) end)
+                end
+            end
+
+
+
+            -- smooth interpolation
+            local alpha = math.clamp(dt / timeDelta, 0, 1)
+            local targetCF = cf1:Lerp(cf2, alpha)
+            rootPart.CFrame = rootPart.CFrame:Lerp(targetCF, 0.35)
+
+            -- manual sync when bypass enabled
+            if isAnimationBypassEnabled then
+                pcall(function() humanoid:MoveTo(targetCF.Position) end)
+            end
+
+            -- if nextFrame marks last frame, auto-play next recording
+            if nextFrame.isLast and nextRecordingIndex then
+                -- small debounce to avoid recursive call within same frame
+                local idx = nextRecordingIndex
+                task.defer(function()
+                    if nextRecordingIndex == idx then
+                        pcall(playNextRecording)
+                    end
+                end)
+            end
+        end
+    end)
+end
 
 print("[ArexansTools] Merged playback fix appended - overrides loaded.")
 
