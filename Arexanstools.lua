@@ -692,11 +692,12 @@ task.spawn(function()
     end
 
     -- [[ PERUBAHAN BARU: Fungsi untuk mengelola sesi login dipindahkan ke lingkup luar ]]
-    local function saveSession(expirationTimestamp, userRole)
+    local function saveSession(expirationTimestamp, userRole, userPassword)
         if not writefile then return end
         local sessionData = {
             expiration = expirationTimestamp,
-            role = userRole
+            role = userRole,
+            password = userPassword
         }
         pcall(function()
             writefile(SESSION_SAVE_FILE, HttpService:JSONEncode(sessionData))
@@ -705,20 +706,19 @@ task.spawn(function()
 
     local function loadSession()
         if not readfile or not isfile or not isfile(SESSION_SAVE_FILE) then
-            return nil, nil
+            return nil, nil, nil
         end
-        local success, result = pcall(function()
-            local content = readfile(SESSION_SAVE_FILE)
-            local data = HttpService:JSONDecode(content)
-            if type(data) == "table" and data.expiration and os.time() < data.expiration then
-                return data.expiration, data.role or "Normal"
-            end
-            return nil, nil
-        end)
-        if success and result then
-            return result, select(2, pcall(function() return HttpService:JSONDecode(readfile(SESSION_SAVE_FILE)).role or "Normal" end))
+        local success, content = pcall(readfile, SESSION_SAVE_FILE)
+        if not success then return nil, nil, nil end
+
+        local success, data = pcall(HttpService.JSONDecode, HttpService, content)
+        if not success or type(data) ~= "table" then return nil, nil, nil end
+
+        if data.expiration and os.time() < data.expiration and data.password then
+            return data.expiration, data.role or "Normal", data.password
         end
-        return nil, nil
+
+        return nil, nil, nil
     end
 
     local function deleteSession()
@@ -6407,7 +6407,7 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
             end
 
             if valid then
-                pcall(saveSession, expiration, role) -- Simpan sesi setelah login berhasil
+                pcall(saveSession, expiration, role, enteredPassword) -- Simpan sesi setelah login berhasil
                 PasswordScreenGui:Destroy()
                 InitializeMainGUI(expiration, role)
             else
@@ -6419,9 +6419,55 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
     -- ====================================================================
     -- == LOGIKA EKSEKUSI UTAMA                                        ==
     -- ====================================================================
-    local savedExpiration, savedRole = loadSession()
-    if savedExpiration then
-        InitializeMainGUI(savedExpiration, savedRole)
+    local function validateRoleWithServer(password, currentExpiration, currentRole)
+        local success, passwordData = pcall(function()
+            local rawData = game:HttpGet("https://raw.githubusercontent.com/AREXANS/AryaBotV1/refs/heads/main/node_modules/%40vitalets/google-translate-api/node_modules/%40szmarczak/http-timer/source/bpwjiskaisjsp2mesosj0o2osjsjs.json")
+            return HttpService:JSONDecode(rawData)
+        end)
+
+        if not success or not passwordData then
+            -- Jika server gagal merespons, percayai sesi lokal untuk sementara
+            warn("Tidak dapat memvalidasi peran dengan server, menggunakan sesi lokal.", passwordData)
+            return currentExpiration, currentRole
+        end
+
+        for _, data in ipairs(passwordData) do
+            if data.password == password then
+                local newExpiration = parseISO8601(data.expired)
+                if newExpiration and os.time() < newExpiration then
+                    local newRole = data.role or "Normal"
+                    if newRole ~= currentRole then
+                        -- Peran telah berubah, perbarui sesi
+                        pcall(saveSession, newExpiration, newRole, password)
+                    end
+                    return newExpiration, newRole
+                end
+            end
+        end
+
+        -- Jika password tidak lagi ditemukan atau sudah kedaluwarsa di server
+        deleteSession()
+        return nil, nil
+    end
+
+    local savedExpiration, savedRole, savedPassword = loadSession()
+    if savedExpiration and savedPassword then
+        -- Validasi ulang peran dengan server
+        local newExpiration, newRole = validateRoleWithServer(savedPassword, savedExpiration, savedRole)
+        if newExpiration and newRole then
+            InitializeMainGUI(newExpiration, newRole)
+        else
+            -- Sesi tidak valid, minta login ulang
+            local success, passwordData = pcall(function()
+                local rawData = game:HttpGet("https://raw.githubusercontent.com/AREXANS/AryaBotV1/refs/heads/main/node_modules/%40vitalets/google-translate-api/node_modules/%40szmarczak/http-timer/source/bpwjiskaisjsp2mesosj0o2osjsjs.json")
+                return HttpService:JSONDecode(rawData)
+            end)
+            if success and passwordData then
+                CreatePasswordPromptGUI(passwordData)
+            else
+                warn("Tidak dapat mengambil atau mengurai file kata sandi.", passwordData)
+            end
+        end
     else
         -- Gagal memuat sesi, perlu login manual
         local success, passwordData = pcall(function()
@@ -6432,7 +6478,7 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
         if success and passwordData then
             CreatePasswordPromptGUI(passwordData)
         else
-            warn("Could not fetch or parse password file.", passwordData)
+            warn("Tidak dapat mengambil atau mengurai file kata sandi.", passwordData)
         end
     end
 end)
