@@ -6138,15 +6138,23 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
 
         if input.KeyCode == Enum.KeyCode.F and not UserInputService.TouchEnabled then
             if not IsFlying then StartFly() else StopFly() end
-        elseif input.KeyCode == Enum.KeyCode.R then
+        end
+    end)
+
+    ConnectEvent(UserInputService.InputBegan, function(input, processed)
+        if processed or UserInputService:GetFocusedTextBox() then return end
+
+        if input.KeyCode == Enum.KeyCode.R then
             if isRecording then
                 stopRecording()
+                showNotification("Recording stopped.", Color3.fromRGB(200, 50, 50))
             else
-                -- Cek apakah sedang spectate untuk merekam target, atau rekam diri sendiri
                 if IsViewingPlayer and currentlyViewedPlayer then
                     startRecording(currentlyViewedPlayer)
+                    showNotification("Recording started for " .. currentlyViewedPlayer.DisplayName, Color3.fromRGB(50, 200, 50))
                 else
                     startRecording(LocalPlayer)
+                    showNotification("Recording started.", Color3.fromRGB(50, 200, 50))
                 end
             end
         end
