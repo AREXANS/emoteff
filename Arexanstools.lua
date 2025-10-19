@@ -762,7 +762,7 @@ task.spawn(function()
         -- Frame kontainer untuk menampung ikon dan teks
         local container = Instance.new("Frame", indicatorGui)
         container.BackgroundTransparency = 1
-        container.Position = UDim2.new(0, 20, 0.25, 0) -- Dipindahkan lebih ke atas
+        container.Position = UDim2.new(0, 30, 0.15, 0) -- Dipindahkan lebih ke atas dan ke kanan
         container.Size = UDim2.new(0, 120, 0, 25) 
         container.AnchorPoint = Vector2.new(0, 0.5)
 
@@ -5721,10 +5721,18 @@ task.spawn(function()
 
                 local currentState = currentFrame.state
                 
+                -- ✅ SHIFTLOCK PLAYBACK FIX V2
+                local targetOrientationCFrame = interpolatedCFrame
+                if IsShiftLockEnabled then
+                    local cameraLookVector = Workspace.CurrentCamera.CFrame.LookVector
+                    local lookAtPosition = interpolatedCFrame.Position + Vector3.new(cameraLookVector.X, 0, cameraLookVector.Z)
+                    targetOrientationCFrame = CFrame.new(interpolatedCFrame.Position, lookAtPosition)
+                end
+
                 if not isAnimationBypassEnabled then
                     if playbackMovers.alignPos then
                         playbackMovers.alignPos.Position = interpolatedCFrame.Position
-                        playbackMovers.alignOrient.CFrame = interpolatedCFrame
+                        playbackMovers.alignOrient.CFrame = targetOrientationCFrame
                     end
                     humanoid.WalkSpeed = originalPlaybackWalkSpeed
 
@@ -5759,7 +5767,7 @@ task.spawn(function()
                         playbackMovers.alignPos.MaxForce = 100000
                         playbackMovers.alignOrient.MaxTorque = 100000
                         playbackMovers.alignPos.Position = interpolatedCFrame.Position
-                        playbackMovers.alignOrient.CFrame = interpolatedCFrame
+                        playbackMovers.alignOrient.CFrame = targetOrientationCFrame
                     end
                     
                     -- Hapus semua animasi yang sedang berjalan dari pemutaran sebelumnya untuk memastikan
@@ -7123,79 +7131,6 @@ function playNextRecording()
 end
 
 -- Main smooth playback loop that will override previous loops
-do
-    -- disconnect previous connection if it exists (best-effort: tries to find stored connection variable)
-    if playbackConnection and type(playbackConnection.Disconnect) == "function" then
-        pcall(function() playbackConnection:Disconnect() end)
-    end
-
-    playbackConnection = RunService.RenderStepped:Connect(function(dt)
-        if isPaused or isSmoothPaused then return end
-        if IsPlaybackActive then return end
-        if not _player then return end
-        local char = _player.Character
-        if not char then return end
-        local humanoid = char:FindFirstChildOfClass("Humanoid")
-        local rootPart = char:FindFirstChild("HumanoidRootPart")
-        if humanoid and rootPart and currentFrame and nextFrame then
-            local ok, cf1 = pcall(function() return CFrame.new(unpack(currentFrame.cframe)) end)
-            local ok2, cf2 = pcall(function() return CFrame.new(unpack(nextFrame.cframe)) end)
-            if not ok or not ok2 or not cf1 or not cf2 then return end
-
-            local pos1, pos2 = cf1.Position, cf2.Position
-            local dist = (pos2 - pos1).Magnitude
-            local timeDelta = math.max((nextFrame.time or 0) - (currentFrame.time or 0), 0.016)
-            local dynamicSpeed = math.clamp((dist / timeDelta) * 1.15, 6, 22)
-
-            -- apply movement speed
-            pcall(function() humanoid.WalkSpeed = dynamicSpeed end)
-
-            -- handle jump/freefall states based on vertical delta
-            local heightDelta = pos2.Y - pos1.Y
-            if heightDelta > 2 then
-                pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end)
-            elseif heightDelta < -2 then
-                pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Freefall) end)
-            else
-                -- Do not force Running here; let Animate select Walk vs Run based on WalkSpeed
-                if isAnimationBypassEnabled then
-                    pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Running) end)
-                end
-            end
-
-
-
-            -- smooth interpolation
-            local alpha = math.clamp(dt / timeDelta, 0, 1)
-            local targetCF = cf1:Lerp(cf2, alpha)
-
-            if IsShiftLockEnabled then
-                local cameraLookVector = Workspace.CurrentCamera.CFrame.LookVector
-                local lookAtPosition = targetCF.Position + Vector3.new(cameraLookVector.X, 0, cameraLookVector.Z)
-                local shiftLockCF = CFrame.new(targetCF.Position, lookAtPosition)
-                rootPart.CFrame = rootPart.CFrame:Lerp(shiftLockCF, 0.35)
-            else
-                rootPart.CFrame = rootPart.CFrame:Lerp(targetCF, 0.35)
-            end
-
-            -- manual sync when bypass enabled
-            if isAnimationBypassEnabled then
-                pcall(function() humanoid:MoveTo(targetCF.Position) end)
-            end
-
-            -- if nextFrame marks last frame, auto-play next recording
-            if nextFrame.isLast and nextRecordingIndex then
-                -- small debounce to avoid recursive call within same frame
-                local idx = nextRecordingIndex
-                task.defer(function()
-                    if nextRecordingIndex == idx then
-                        pcall(playNextRecording)
-                    end
-                end)
-            end
-        end
-    end)
-end
 
 print("[ArexansTools] Merged playback fix appended - overrides loaded.")
 
