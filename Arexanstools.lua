@@ -746,6 +746,7 @@ task.spawn(function()
     local PlayerTabContent, PlayerListContainer, GeneralTabContent, TeleportTabContent, VipTabContent, SettingsTabContent, RekamanTabContent
     local PlayerListLayout, GeneralListLayout, TeleportListLayout, VipListLayout, SettingsListLayout, RekamanListLayout
     local setupPlayerTab, setupGeneralTab, setupTeleportTab, setupVipTab, setupSettingsTab, setupRekamanTab
+    local startRecording, stopRecording, stopActions
 
     local function InitializeMainGUI(expirationTimestamp, userRole)
         currentUserRole = userRole
@@ -5282,7 +5283,7 @@ task.spawn(function()
         
         -- [[ Variabel dan fungsi inti ]]
         local recStatusLabel, recordButton, playButton
-        local startRecording, stopActions, playSequence, playSingleRecording
+        local playSequence, playSingleRecording
         local selectedRecordings = {}
         local playbackConnection = nil
         local isPaused = false
@@ -5381,6 +5382,7 @@ task.spawn(function()
             currentRecordingData = {}
             local startTime = tick()
             recStatusLabel.Text = "Merekam: " .. targetPlayer.DisplayName .. " 🔴"
+            showNotification("Recording started for " .. targetPlayer.DisplayName .. " (Press K to stop)", Color3.fromRGB(50, 200, 50))
             
             recordButton.Text = "⏹️"
             recordButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
@@ -5425,11 +5427,12 @@ task.spawn(function()
             end)
         end
     
-        local stopRecording, stopPlayback -- Deklarasi awal
+        local stopPlayback -- Deklarasi awal
 
         stopRecording = function()
             if not isRecording then return end
             isRecording = false
+            showNotification("Recording stopped.", Color3.fromRGB(200, 50, 50))
             if recordingConnection then recordingConnection:Disconnect(); recordingConnection = nil end
             
             -- Hapus GUI Indikator Perekaman
@@ -6144,21 +6147,19 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
     ConnectEvent(UserInputService.InputBegan, function(input, processed)
         if processed or UserInputService:GetFocusedTextBox() then return end
 
-        if input.KeyCode == Enum.KeyCode.R then
+        if input.KeyCode == Enum.KeyCode.K then
             if isRecording then
                 stopRecording()
-                showNotification("Recording stopped.", Color3.fromRGB(200, 50, 50))
             else
                 if IsViewingPlayer and currentlyViewedPlayer then
                     startRecording(currentlyViewedPlayer)
-                    showNotification("Recording started for " .. currentlyViewedPlayer.DisplayName, Color3.fromRGB(50, 200, 50))
                 else
                     startRecording(LocalPlayer)
-                    showNotification("Recording started.", Color3.fromRGB(50, 200, 50))
                 end
             end
         end
     end)
+
     
     local function applyAllAnimations(character)
         if not character or not next(lastAnimations) then return end
