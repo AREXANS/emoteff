@@ -5364,7 +5364,7 @@ task.spawn(function()
             indicatorLabel.Size = UDim2.new(1, 0, 1, 0)
             indicatorLabel.BackgroundTransparency = 1
             indicatorLabel.Font = Enum.Font.SourceSansBold
-            indicatorLabel.Text = "⏺ Recording..."
+            indicatorLabel.Text = "🔴 Recording..."
             indicatorLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
             indicatorLabel.TextSize = 14
 
@@ -5382,7 +5382,7 @@ task.spawn(function()
             currentRecordingData = {}
             local startTime = tick()
             recStatusLabel.Text = "Merekam: " .. targetPlayer.DisplayName .. " 🔴"
-            showNotification("Recording started for " .. targetPlayer.DisplayName .. " (Press R to stop)", Color3.fromRGB(50, 200, 50))
+            showNotification("Recording started for " .. targetPlayer.DisplayName .. " (Press C to stop)", Color3.fromRGB(50, 200, 50))
             
             recordButton.Text = "⏹️"
             recordButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
@@ -6147,7 +6147,7 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
     ConnectEvent(UserInputService.InputBegan, function(input, processed)
         if processed or UserInputService:GetFocusedTextBox() then return end
 
-        if input.KeyCode == Enum.KeyCode.R then
+        if input.KeyCode == Enum.KeyCode.C then
             if isRecording then
                 stopRecording()
             else
