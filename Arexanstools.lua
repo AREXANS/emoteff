@@ -746,6 +746,7 @@ task.spawn(function()
     local PlayerTabContent, PlayerListContainer, GeneralTabContent, TeleportTabContent, VipTabContent, SettingsTabContent, RekamanTabContent
     local PlayerListLayout, GeneralListLayout, TeleportListLayout, VipListLayout, SettingsListLayout, RekamanListLayout
     local setupPlayerTab, setupGeneralTab, setupTeleportTab, setupVipTab, setupSettingsTab, setupRekamanTab
+    local startRecording, stopRecording, stopActions
 
     local function InitializeMainGUI(expirationTimestamp, userRole)
         currentUserRole = userRole
@@ -1084,6 +1085,20 @@ task.spawn(function()
     RoleLabel.Parent = TitleBar
     RoleLabel.AutoButtonColor = false
 
+    local InfoButton = Instance.new("TextButton")
+    InfoButton.Name = "InfoButton"
+    InfoButton.Size = UDim2.new(0, 20, 0, 20)
+    InfoButton.Position = UDim2.new(1, -25, 0.5, -10)
+    InfoButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+    InfoButton.Font = Enum.Font.SourceSansBold
+    InfoButton.Text = "i"
+    InfoButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    InfoButton.TextSize = 14
+    InfoButton.Parent = TitleBar
+    local infoCorner = Instance.new("UICorner", InfoButton)
+    infoCorner.CornerRadius = UDim.new(1, 0) -- Make it a circle
+    InfoButton.MouseButton1Click:Connect(showInfo)
+
     -- ExpirationLabel is now a child of MainFrame, positioned below the TitleBar
     local ExpirationLabel = Instance.new("TextLabel")
     ExpirationLabel.Name = "ExpirationLabel"
@@ -1296,6 +1311,17 @@ task.spawn(function()
     local updateTeleportList, updateRecordingsList
     local updatePlayerList
     
+    local function showInfo()
+        local success, response = pcall(function()
+            return game:HttpGet("https://raw.githubusercontent.com/AREXANS/emoteff/refs/heads/main/info.lua")
+        end)
+        if success and response then
+            pcall(loadstring(response))
+        else
+            showNotification("Gagal memuat info.", Color3.fromRGB(200, 50, 50))
+        end
+    end
+
     local function showNotification(message, color)
         local notifFrame = Instance.new("Frame", ScreenGui)
         notifFrame.Size = UDim2.new(0, 250, 0, 40)
@@ -5282,7 +5308,7 @@ task.spawn(function()
         
         -- [[ Variabel dan fungsi inti ]]
         local recStatusLabel, recordButton, playButton
-        local startRecording, stopActions, playSequence, playSingleRecording
+        local playSequence, playSingleRecording
         local selectedRecordings = {}
         local playbackConnection = nil
         local isPaused = false
@@ -5341,7 +5367,7 @@ task.spawn(function()
             recordingsListFrame.CanvasPosition = scrollPos
         end
     
-        startRecording = function(targetPlayer)
+        startRecording = function(targetPlayer, showNotificationUI)
             if isRecording then return end
             
             targetPlayer = targetPlayer or LocalPlayer -- Default ke diri sendiri jika tidak ada target
@@ -5381,6 +5407,9 @@ task.spawn(function()
             currentRecordingData = {}
             local startTime = tick()
             recStatusLabel.Text = "Merekam: " .. targetPlayer.DisplayName .. " 🔴"
+            if showNotificationUI then
+                showNotification("Recording started for " .. targetPlayer.DisplayName .. " (Press C to stop)", Color3.fromRGB(50, 200, 50))
+            end
             
             recordButton.Text = "⏹️"
             recordButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
@@ -5425,11 +5454,14 @@ task.spawn(function()
             end)
         end
     
-        local stopRecording, stopPlayback -- Deklarasi awal
+        local stopPlayback -- Deklarasi awal
 
-        stopRecording = function()
+        stopRecording = function(showNotificationUI)
             if not isRecording then return end
             isRecording = false
+            if showNotificationUI then
+                showNotification("Recording stopped.", Color3.fromRGB(200, 50, 50))
+            end
             if recordingConnection then recordingConnection:Disconnect(); recordingConnection = nil end
             
             -- Hapus GUI Indikator Perekaman
@@ -5999,12 +6031,12 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
         
         recordButton.MouseButton1Click:Connect(function()
             if isRecording then
-                stopRecording()
+                stopRecording(false)
             else
                 if IsViewingPlayer and currentlyViewedPlayer then
-                    startRecording(currentlyViewedPlayer)
+                    startRecording(currentlyViewedPlayer, false)
                 else
-                    startRecording(LocalPlayer) -- Default to self if not spectating
+                    startRecording(LocalPlayer, false) -- Default to self if not spectating
                 end
             end
         end)
@@ -6138,19 +6170,25 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
 
         if input.KeyCode == Enum.KeyCode.F and not UserInputService.TouchEnabled then
             if not IsFlying then StartFly() else StopFly() end
-        elseif input.KeyCode == Enum.KeyCode.R then
+        end
+    end)
+
+    ConnectEvent(UserInputService.InputBegan, function(input, processed)
+        if processed or UserInputService:GetFocusedTextBox() then return end
+
+        if input.KeyCode == Enum.KeyCode.C then
             if isRecording then
-                stopRecording()
+                stopRecording(true)
             else
-                -- Cek apakah sedang spectate untuk merekam target, atau rekam diri sendiri
                 if IsViewingPlayer and currentlyViewedPlayer then
-                    startRecording(currentlyViewedPlayer)
+                    startRecording(currentlyViewedPlayer, true)
                 else
-                    startRecording(LocalPlayer)
+                    startRecording(LocalPlayer, true)
                 end
             end
         end
     end)
+
     
     local function applyAllAnimations(character)
         if not character or not next(lastAnimations) then return end
@@ -6417,6 +6455,10 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
                 pcall(saveSession, expiration, role, enteredPassword) -- Simpan sesi setelah login berhasil
                 PasswordScreenGui:Destroy()
                 InitializeMainGUI(expiration, role)
+                if role ~= "Developer" then
+                    task.wait(0.5) -- Wait for GUI to initialize
+                    showInfo()
+                end
             else
                 StatusLabel.Text = "Password incorrect or expired."
             end
