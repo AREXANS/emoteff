@@ -922,6 +922,16 @@ task.spawn(function()
         copyMovementConnection = nil
         copyAnimationCache = {}
         copyMovementMovers = {}
+
+        -- [[ VARIABEL UNTUK FITUR KUNCI KECEPATAN ]] --
+        local speedLock_currentSpeed = 16
+        local speedLock_humanoid = nil
+        local speedLock_isEnforced = false
+        local speedLock_isPaused = false
+        local speedLock_connections = {}
+        local speedLock_lastTick = 0
+        local speedLock_tickInterval = 0.12
+        local speedLock_serverBaseline = nil
     
         -- ====================================================================
         -- == VARIABEL UNTUK FITUR EMOTE DAN ANIMASI (DIPISAHKAN)          ==
@@ -1331,19 +1341,18 @@ task.spawn(function()
     
     local function showNotification(message, color)
         local notifFrame = Instance.new("Frame", ScreenGui)
-        notifFrame.Size = UDim2.new(0, 250, 0, 40)
-        notifFrame.Position = UDim2.new(0.5, -125, 0, -50)
-        notifFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 25) -- Tema biru-hitam
-        notifFrame.BackgroundTransparency = 0.3 -- Tema transparan
+        notifFrame.Size = UDim2.new(0, 180, 0, 25) -- Perkecil ukuran frame
+        notifFrame.Position = UDim2.new(0.5, -90, 0, -30) -- Sesuaikan posisi awal
+        notifFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 25)
+        notifFrame.BackgroundTransparency = 0.3
         notifFrame.BorderSizePixel = 0
         
         local corner = Instance.new("UICorner", notifFrame)
-        corner.CornerRadius = UDim.new(0, 8)
+        corner.CornerRadius = UDim.new(0, 6) -- Sedikit perkecil corner
         
         local stroke = Instance.new("UIStroke", notifFrame)
-        -- Stroke akan menggunakan warna status (merah/hijau) atau biru default
         stroke.Color = color or Color3.fromRGB(0, 150, 255) 
-        stroke.Thickness = 1.5
+        stroke.Thickness = 1
         stroke.Transparency = 0.4
         
         local notifLabel = Instance.new("TextLabel", notifFrame)
@@ -1352,13 +1361,13 @@ task.spawn(function()
         notifLabel.BackgroundTransparency = 1
         notifLabel.Text = message
         notifLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        notifLabel.Font = Enum.Font.SourceSansBold
-        notifLabel.TextSize = 14
+        notifLabel.Font = Enum.Font.SourceSans -- Ganti ke font yang lebih tipis
+        notifLabel.TextSize = 12 -- Perkecil ukuran font
         notifLabel.TextWrapped = true
 
-        local tweenInfo = TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-        local startPosition = UDim2.new(0.5, -125, 0, -50)
-        local goalPosition = UDim2.new(0.5, -125, 0, 15)
+        local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out) -- Percepat animasi
+        local startPosition = UDim2.new(0.5, -90, 0, -30) -- Sesuaikan posisi
+        local goalPosition = UDim2.new(0.5, -90, 0, 10) -- Sesuaikan posisi akhir
         
         notifFrame.Position = startPosition
         TweenService:Create(notifFrame, tweenInfo, {Position = goalPosition}):Play()
@@ -1524,7 +1533,9 @@ task.spawn(function()
             AnimationTransparent = isAnimationTransparent,
             WalkSpeedValue = Settings.WalkSpeed,
             FlySpeedValue = Settings.FlySpeed,
-            FEInvisibleTransparencyValue = Settings.FEInvisibleTransparency
+            FEInvisibleTransparencyValue = Settings.FEInvisibleTransparency,
+            SpeedLockEnabled = speedLock_isEnforced,
+            SpeedLockValue = speedLock_currentSpeed
         }
         
         pcall(function()
@@ -1562,6 +1573,8 @@ task.spawn(function()
                 Settings.WalkSpeed = decodedData.WalkSpeedValue or 16
                 Settings.FlySpeed = decodedData.FlySpeedValue or 1
                 Settings.FEInvisibleTransparency = decodedData.FEInvisibleTransparencyValue or 0.75
+                speedLock_isEnforced = decodedData.SpeedLockEnabled or false
+                speedLock_currentSpeed = decodedData.SpeedLockValue or 16
             end
         end)
         if not success then
@@ -2692,6 +2705,116 @@ task.spawn(function()
     -- ====================================================================
     -- == BAGIAN FUNGSI UTAMA (PLAYER, COMBAT, DLL)                      ==
     -- ====================================================================
+
+    -- [[ FUNGSI UNTUK FITUR KUNCI KECEPATAN ]] --
+    local speedLock_disconnectAll, speedLock_bindHumanoid
+    
+    local function speedLock_canonicalDefault()
+        local ok, val = pcall(function() return game:GetService("StarterPlayer").CharacterWalkSpeed end)
+        if ok and typeof(val) == "number" and val > 0 then return val end
+        return 16
+    end
+
+    local function speedLock_setWalkSpeed(humanoid, speed)
+        if humanoid and humanoid.Parent then
+            pcall(function() humanoid.WalkSpeed = speed end)
+        end
+    end
+
+    local function speedLock_canEnforce()
+        local h = speedLock_humanoid
+        if not speedLock_isEnforced then return false end
+        if not h or not h.Parent then return false end
+        if speedLock_isPaused then return false end
+        if h.Health <= 0 then return false end
+        if h.PlatformStand or h.Sit then return false end
+        local st = h:GetState()
+        if st == Enum.HumanoidStateType.Ragdoll or st == Enum.HumanoidStateType.FallingDown or st == Enum.HumanoidStateType.Physics or st == Enum.HumanoidStateType.GettingUp or st == Enum.HumanoidStateType.Seated then return false end
+        local hrp = h.Parent:FindFirstChild("HumanoidRootPart")
+        if hrp and hrp.Anchored then return false end
+        return true
+    end
+
+    local function speedLock_heartbeat()
+        if not speedLock_humanoid then return end
+        local t = tick()
+        if t - speedLock_lastTick < speedLock_tickInterval then return end
+        speedLock_lastTick = t
+        if not speedLock_canEnforce() then return end
+        if speedLock_humanoid.WalkSpeed ~= speedLock_currentSpeed then
+            speedLock_setWalkSpeed(speedLock_humanoid, speedLock_currentSpeed)
+        end
+    end
+
+    speedLock_disconnectAll = function()
+        for _, conn in ipairs(speedLock_connections) do
+            if conn then conn:Disconnect() end
+        end
+        speedLock_connections = {}
+    end
+    
+    local function speedLock_captureServerBaseline()
+        task.spawn(function()
+            local h = speedLock_humanoid
+            if not h or not h.Parent then return end
+            local start = tick()
+            local last = h.WalkSpeed
+            while tick() - start < 0.6 do
+                last = h.WalkSpeed
+                task.wait(0.1)
+            end
+            if typeof(last) == "number" and last > 0 then
+                speedLock_serverBaseline = last
+            end
+        end)
+    end
+
+    local function speedLock_applyDisabledState()
+        local h = speedLock_humanoid
+        if not h or not h.Parent then return end
+        local target = speedLock_serverBaseline or speedLock_canonicalDefault()
+        speedLock_setWalkSpeed(h, target)
+        speedLock_captureServerBaseline()
+    end
+
+    speedLock_bindHumanoid = function(humanoid)
+        if not humanoid then return end
+        speedLock_humanoid = humanoid
+        speedLock_disconnectAll()
+
+        table.insert(speedLock_connections, humanoid:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+            if speedLock_isEnforced and speedLock_canEnforce() and humanoid.WalkSpeed ~= speedLock_currentSpeed then
+                speedLock_setWalkSpeed(humanoid, speedLock_currentSpeed)
+            end
+        end))
+
+        table.insert(speedLock_connections, humanoid.StateChanged:Connect(function(_, new)
+            if new == Enum.HumanoidStateType.Ragdoll or new == Enum.HumanoidStateType.FallingDown or new == Enum.HumanoidStateType.Physics or new == Enum.HumanoidStateType.GettingUp or new == Enum.HumanoidStateType.Seated then
+                speedLock_isPaused = true
+                task.delay(1.0, function() speedLock_isPaused = false end)
+            end
+        end))
+        
+        table.insert(speedLock_connections, humanoid:GetPropertyChangedSignal("PlatformStand"):Connect(function() 
+            speedLock_isPaused = humanoid.PlatformStand 
+        end))
+
+        table.insert(speedLock_connections, humanoid.AncestryChanged:Connect(function(_, parent)
+            if not parent then speedLock_disconnectAll() end
+        end))
+
+        if speedLock_isEnforced then
+            if not table.find(speedLock_connections, "heartbeat") then
+                speedLock_lastTick = 0
+                local conn = RunService.Heartbeat:Connect(speedLock_heartbeat)
+                table.insert(speedLock_connections, conn)
+            end
+            if speedLock_canEnforce() then speedLock_setWalkSpeed(humanoid, speedLock_currentSpeed) end
+        else
+            speedLock_applyDisabledState()
+        end
+    end
+    -- [[ AKHIR FUNGSI KUNCI KECEPATAN ]]
 
     local stopSpectate; -- Deklarasi awal
     local cycleSpectate;
@@ -4057,12 +4180,12 @@ task.spawn(function()
             if not IsViewingPlayer or not currentlyViewedPlayer then return end
 
             if isRecording and currentRecordingTarget == currentlyViewedPlayer then
-                stopRecording()
+                stopRecording(false)
             elseif isRecording and currentRecordingTarget ~= currentlyViewedPlayer then
                 showNotification("Harus menghentikan rekaman saat ini terlebih dahulu.", Color3.fromRGB(200, 150, 50))
             else
                 switchTab("Rekaman")
-                startRecording(currentlyViewedPlayer)
+                startRecording(currentlyViewedPlayer, false)
             end
         end)
 
@@ -4844,6 +4967,40 @@ task.spawn(function()
         createToggle(GeneralTabContent, "ESP Tubuh", IsEspBodyEnabled, ToggleESPBody)
         createSlider(GeneralTabContent, "Kecepatan Jalan", 0, Settings.MaxWalkSpeed, Settings.WalkSpeed, "", 1, function(v) Settings.WalkSpeed = v; if IsWalkSpeedEnabled and LocalPlayer.Character and LocalPlayer.Character.Humanoid then LocalPlayer.Character.Humanoid.WalkSpeed = v end end)
         createToggle(GeneralTabContent, "Jalan Cepat", IsWalkSpeedEnabled, function(v) IsWalkSpeedEnabled = v; ToggleWalkSpeed(v) end)
+        
+        -- [[ INTEGRASI KUNCI KECEPATAN UI ]] --
+        createSlider(GeneralTabContent, "Kecepatan Terkunci", 0, 200, speedLock_currentSpeed, "", 1, function(v) 
+            speedLock_currentSpeed = v
+            if speedLock_isEnforced and speedLock_canEnforce() then
+                speedLock_setWalkSpeed(speedLock_humanoid, speedLock_currentSpeed)
+            end
+        end)
+        createToggle(GeneralTabContent, "Kunci Kecepatan", speedLock_isEnforced, function(state)
+            speedLock_isEnforced = state
+            local h = speedLock_humanoid
+            if not h or not h.Parent then return end
+            
+            if state then
+                if not next(speedLock_connections) then -- Re-bind if connections were lost
+                    speedLock_bindHumanoid(h)
+                end
+                if not table.find(speedLock_connections, "heartbeat") then
+                    speedLock_lastTick = 0
+                    local conn = RunService.Heartbeat:Connect(speedLock_heartbeat)
+                    table.insert(speedLock_connections, conn)
+                end
+                if speedLock_canEnforce() then speedLock_setWalkSpeed(h, speedLock_currentSpeed) end
+                showNotification("Kunci Kecepatan diaktifkan", Color3.fromRGB(50, 200, 50))
+            else
+                speedLock_disconnectAll()
+                speedLock_applyDisabledState()
+                -- Re-bind essential listeners after disconnecting all
+                task.wait(0.1)
+                speedLock_bindHumanoid(h)
+                showNotification("Kunci Kecepatan dinonaktifkan", Color3.fromRGB(200, 150, 50))
+            end
+        end)
+        
         createSlider(GeneralTabContent, "Kecepatan Terbang", 0, Settings.MaxFlySpeed, Settings.FlySpeed, "", 0.1, function(v) Settings.FlySpeed = v end)
         createToggle(GeneralTabContent, "Terbang", IsFlying, function(v) if v then if UserInputService.TouchEnabled then StartMobileFly() else StartFly() end else if UserInputService.TouchEnabled then StopMobileFly() else StopFly() end end end)
         createToggle(GeneralTabContent, "Noclip", IsNoclipEnabled, function(v) ToggleNoclip(v) end)
@@ -5105,29 +5262,6 @@ task.spawn(function()
         end)
     end
     
-    setupGeneralTab = function()
-        createToggle(GeneralTabContent, "ESP Nama", IsEspNameEnabled, ToggleESPName)
-        createToggle(GeneralTabContent, "ESP Tubuh", IsEspBodyEnabled, ToggleESPBody)
-        createSlider(GeneralTabContent, "Kecepatan Jalan", 0, Settings.MaxWalkSpeed, Settings.WalkSpeed, "", 1, function(v) Settings.WalkSpeed = v; if IsWalkSpeedEnabled and LocalPlayer.Character and LocalPlayer.Character.Humanoid then LocalPlayer.Character.Humanoid.WalkSpeed = v end end)
-        createToggle(GeneralTabContent, "Jalan Cepat", IsWalkSpeedEnabled, function(v) IsWalkSpeedEnabled = v; ToggleWalkSpeed(v) end)
-        createSlider(GeneralTabContent, "Kecepatan Terbang", 0, Settings.MaxFlySpeed, Settings.FlySpeed, "", 0.1, function(v) Settings.FlySpeed = v end)
-        createToggle(GeneralTabContent, "Terbang", IsFlying, function(v) if v then if UserInputService.TouchEnabled then StartMobileFly() else StartFly() end else if UserInputService.TouchEnabled then StopMobileFly() else StopFly() end end end)
-        createToggle(GeneralTabContent, "Noclip", IsNoclipEnabled, function(v) ToggleNoclip(v) end)
-        createToggle(GeneralTabContent, "Infinity Jump", IsInfinityJumpEnabled, function(v) IsInfinityJumpEnabled = v; saveFeatureStates(); if v then if LocalPlayer.Character and LocalPlayer.Character.Humanoid then infinityJumpConnection = ConnectEvent(UserInputService.JumpRequest, function() LocalPlayer.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end) end elseif infinityJumpConnection then infinityJumpConnection:Disconnect(); infinityJumpConnection = nil end end)
-        createToggle(GeneralTabContent, "Mode Kebal", IsGodModeEnabled, ToggleGodMode)
-        createToggle(GeneralTabContent, "FE Invisible", IsFEInvisibleEnabled, ToggleFEInvisible)
-        createSlider(GeneralTabContent, "Transparansi Invisible", 0, 100, Settings.FEInvisibleTransparency * 100, "%", 1, function(v)
-            Settings.FEInvisibleTransparency = v / 100
-            if IsFEInvisibleEnabled and LocalPlayer.Character then
-                setCharacterTransparency(LocalPlayer.Character, Settings.FEInvisibleTransparency)
-            end
-            saveFeatureStates() -- Simpan perubahan transparansi
-        end)
-        createButton(GeneralTabContent, "Buka Touch Fling", CreateTouchFlingGUI)
-        createToggle(GeneralTabContent, "Anti-Fling", antifling_enabled, ToggleAntiFling)
-        createButton(GeneralTabContent, "Buka GUI Magnet", createMagnetGUI)
-        createButton(GeneralTabContent, "Buka GUI Part Controller", createPartControllerGUI)
-    end
     
     setupTeleportTab = function()
         createButton(TeleportTabContent, "Pindai Ulang Map", function() for _, part in pairs(Workspace:GetDescendants()) do if part:IsA("BasePart") then local nameLower = part.Name:lower(); if (nameLower:find("checkpoint") or nameLower:find("pos") or nameLower:find("finish") or nameLower:find("start")) and not Players:GetPlayerFromCharacter(part.Parent) then addTeleportLocation(part.Name, part.CFrame) end end end end).LayoutOrder = 1
@@ -5374,7 +5508,7 @@ task.spawn(function()
             recordingsListFrame.CanvasPosition = scrollPos
         end
     
-        startRecording = function(targetPlayer)
+        startRecording = function(targetPlayer, showNotificationFlag)
             if isRecording then return end
             
             targetPlayer = targetPlayer or LocalPlayer -- Default ke diri sendiri jika tidak ada target
@@ -5415,7 +5549,9 @@ task.spawn(function()
             currentRecordingData = {}
             local startTime = tick()
             recStatusLabel.Text = "Merekam: " .. targetPlayer.DisplayName .. " 🔴"
-            showNotification("Recording started for " .. targetPlayer.DisplayName .. " (Press C to stop)", Color3.fromRGB(50, 200, 50))
+            if showNotificationFlag then
+                showNotification("Recording started (Press C to stop)", Color3.fromRGB(50, 200, 50))
+            end
             
             recordButton.Text = "⏹️"
             recordButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
@@ -5462,10 +5598,12 @@ task.spawn(function()
     
         local stopPlayback -- Deklarasi awal
 
-        stopRecording = function()
+        stopRecording = function(showNotificationFlag)
             if not isRecording then return end
             isRecording = false
-            showNotification("Recording stopped.", Color3.fromRGB(200, 50, 50))
+            if showNotificationFlag then
+                showNotification("Recording stopped.", Color3.fromRGB(200, 50, 50))
+            end
             if recordingConnection then recordingConnection:Disconnect(); recordingConnection = nil end
             
             -- Hapus GUI Indikator Perekaman
@@ -5700,18 +5838,22 @@ task.spawn(function()
                     interpolatedCFrame = cframeCurrent:Lerp(cframeToPlay, alpha)
                 end
 
-                -- Shiftlock Fix: Always derive orientation from camera when shiftlock is active
-                if IsShiftLockEnabled or (UserInputService and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter) then
-                    local cameraCFrame = Workspace.CurrentCamera.CFrame
-                    interpolatedCFrame = CFrame.new(interpolatedCFrame.Position) * CFrame.Angles(0, cameraCFrame:ToOrientation())
-                end
 
                 local currentState = currentFrame.state
                 
                 if not isAnimationBypassEnabled then
                     if playbackMovers.alignPos then
                         playbackMovers.alignPos.Position = interpolatedCFrame.Position
-                        playbackMovers.alignOrient.CFrame = interpolatedCFrame
+                        -- Shiftlock Fix v3: Toggle the mover's Enabled property for better replication
+                        if playbackMovers.alignOrient then
+                            local isShiftLockActive = (UserInputService and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter)
+                            if isShiftLockActive then
+                                playbackMovers.alignOrient.Enabled = false
+                            else
+                                playbackMovers.alignOrient.Enabled = true
+                                playbackMovers.alignOrient.CFrame = interpolatedCFrame
+                            end
+                        end
                     end
                     humanoid.WalkSpeed = originalPlaybackWalkSpeed
         
@@ -5756,10 +5898,20 @@ task.spawn(function()
                     end
                     
                     -- Gerakkan karakter menggunakan AlignPosition dan AlignOrientation untuk FE
-                    if playbackMovers.alignPos then
+                    if playbackMovers.alignPos and playbackMovers.alignOrient then
                         playbackMovers.alignPos.Position = interpolatedCFrame.Position
-                        playbackMovers.alignOrient.CFrame = interpolatedCFrame
+                        -- Shiftlock Fix v3: Toggle the mover's Enabled property for better replication
+                        local isShiftLockActive = (UserInputService and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter)
+                        if isShiftLockActive then
+                            playbackMovers.alignOrient.Enabled = false
+                        else
+                            playbackMovers.alignOrient.Enabled = true
+                            playbackMovers.alignOrient.CFrame = interpolatedCFrame
+                        end
                     end
+                    
+                    -- Animation Bypass Smoothening: Signal movement to the Animate script
+                    pcall(function() humanoid:MoveTo(interpolatedCFrame.Position) end)
 
                     -- Sinkronisasi kecepatan animasi lari dengan kecepatan gerak
                     if humanoid:FindFirstChild("Animator") then
@@ -6064,12 +6216,12 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
         
         recordButton.MouseButton1Click:Connect(function()
             if isRecording then
-                stopRecording()
+                stopRecording(false)
             else
                 if IsViewingPlayer and currentlyViewedPlayer then
-                    startRecording(currentlyViewedPlayer)
+                    startRecording(currentlyViewedPlayer, false)
                 else
-                    startRecording(LocalPlayer) -- Default to self if not spectating
+                    startRecording(LocalPlayer, false) -- Default to self if not spectating
                 end
             end
         end)
@@ -6211,12 +6363,12 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
 
         if input.KeyCode == Enum.KeyCode.C then
             if isRecording then
-                stopRecording()
+                stopRecording(true)
             else
                 if IsViewingPlayer and currentlyViewedPlayer then
-                    startRecording(currentlyViewedPlayer)
+                    startRecording(currentlyViewedPlayer, true)
                 else
-                    startRecording(LocalPlayer)
+                    startRecording(LocalPlayer, true)
                 end
             end
         end
@@ -6288,6 +6440,11 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
         ToggleAntiFling(antifling_enabled)
         ToggleNoclip(IsNoclipEnabled)
         ToggleShiftLock(IsShiftLockEnabled)
+
+        -- [[ INTEGRASI KUNCI KECEPATAN ]] --
+        if character:FindFirstChildOfClass("Humanoid") then
+            speedLock_bindHumanoid(character:FindFirstChildOfClass("Humanoid"))
+        end
 
         -- Untuk fitur yang memerlukan logika khusus saat respawn
         if IsInvisibleGhostEnabled then
