@@ -5386,10 +5386,11 @@ task.spawn(function()
             recordingIndicatorGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
             recordingIndicatorGui.DisplayOrder = 99
             local indicatorFrame = Instance.new("Frame", recordingIndicatorGui)
+            indicatorFrame.AnchorPoint = Vector2.new(1, 0)
+            indicatorFrame.Position = UDim2.new(1, -10, 0, 10)
+            indicatorFrame.Size = UDim2.new(0, 110, 0, 25)
             indicatorFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
             indicatorFrame.BackgroundTransparency = 0.5
-            indicatorFrame.Position = UDim2.new(0, 30, 0.15, 0)
-            indicatorFrame.Size = UDim2.new(0, 110, 0, 25)
             local indicatorCorner = Instance.new("UICorner", indicatorFrame)
             indicatorCorner.CornerRadius = UDim.new(0, 8)
             local indicatorLabel = Instance.new("TextLabel", indicatorFrame)
@@ -5729,15 +5730,44 @@ task.spawn(function()
                     for id, track in pairs(animationCache) do
                         if not requiredAnims[id] and track.IsPlaying then track:Stop(0.1) end
                     end
-                else
+                else -- Animation Bypass is ENABLED
+                    -- Hapus animasi yang di-cache dari mode non-bypass
+                    if next(animationCache) then
+                        for id, track in pairs(animationCache) do
+                            if track.IsPlaying then track:Stop(0) end
+                        end
+                        animationCache = {} -- Kosongkan cache
+                    end
+
+                    -- Kalkulasi kecepatan dinamis dari data rekaman
+                    humanoid.WalkSpeed = velocity
+                    
+                    -- Tentukan state humanoid berdasarkan pergerakan vertikal
+                    local heightDelta = cframeToPlay.Position.Y - cframeCurrent.Position.Y
+                    if heightDelta > 0.5 then -- Threshold untuk lompat
+                        pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end)
+                    elseif heightDelta < -1.5 then -- Threshold untuk jatuh
+                        pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Freefall) end)
+                    else
+                        -- Jika tidak lompat atau jatuh, pastikan state-nya Running
+                        if humanoid:GetState() ~= Enum.HumanoidStateType.Running then
+                            pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Running) end)
+                        end
+                    end
+                    
+                    -- Gerakkan karakter menggunakan AlignPosition dan AlignOrientation untuk FE
                     if playbackMovers.alignPos then
                         playbackMovers.alignPos.Position = interpolatedCFrame.Position
                         playbackMovers.alignOrient.CFrame = interpolatedCFrame
                     end
-                    if next(animationCache) then
-                        for id, track in pairs(animationCache) do
-                            if track.IsPlaying then track:Stop(0) end
-                            animationCache[id] = nil
+
+                    -- Sinkronisasi kecepatan animasi lari dengan kecepatan gerak
+                    if humanoid:FindFirstChild("Animator") then
+                        local animator = humanoid.Animator
+                        for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+                            if track.Name:lower():find("run") then
+                                track:AdjustSpeed(math.clamp(velocity / 16, 0.8, 2.0))
+                            end
                         end
                     end
                 end
