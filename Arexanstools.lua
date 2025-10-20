@@ -5709,9 +5709,15 @@ task.spawn(function()
                 if not isAnimationBypassEnabled then
                     if playbackMovers.alignPos then
                         playbackMovers.alignPos.Position = interpolatedCFrame.Position
-                        -- Shiftlock Fix: Only control orientation if shift lock is NOT active
-                        if not IsShiftLockEnabled and not (UserInputService and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter) then
-                            playbackMovers.alignOrient.CFrame = interpolatedCFrame
+                        -- Shiftlock Fix v2: Dynamically disable/enable rotational mover
+                        if playbackMovers.alignOrient then
+                            local isShiftLockActive = (UserInputService and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter)
+                            if isShiftLockActive then
+                                playbackMovers.alignOrient.MaxTorque = 0
+                            else
+                                playbackMovers.alignOrient.MaxTorque = 100000 -- Restore torque
+                                playbackMovers.alignOrient.CFrame = interpolatedCFrame
+                            end
                         end
                     end
                     humanoid.WalkSpeed = originalPlaybackWalkSpeed
@@ -5757,11 +5763,15 @@ task.spawn(function()
                     end
                     
                     -- Gerakkan karakter menggunakan AlignPosition dan AlignOrientation untuk FE
-                    if playbackMovers.alignPos then
+                    if playbackMovers.alignPos and playbackMovers.alignOrient then
                         playbackMovers.alignPos.Position = interpolatedCFrame.Position
-                        -- Shiftlock Fix: Only control orientation if shift lock is NOT active
-                        if not IsShiftLockEnabled and not (UserInputService and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter) then
-                           playbackMovers.alignOrient.CFrame = interpolatedCFrame
+                        -- Shiftlock Fix v2: Dynamically disable/enable rotational mover
+                        local isShiftLockActive = (UserInputService and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter)
+                        if isShiftLockActive then
+                            playbackMovers.alignOrient.MaxTorque = 0
+                        else
+                            playbackMovers.alignOrient.MaxTorque = 100000 -- Restore torque
+                            playbackMovers.alignOrient.CFrame = interpolatedCFrame
                         end
                     end
                     
