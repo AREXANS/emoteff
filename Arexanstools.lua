@@ -5726,11 +5726,21 @@ task.spawn(function()
 
                 local currentState = currentFrame.state
                 
-                if not isAnimationBypassEnabled then
-                    if playbackMovers.alignPos then
-                        playbackMovers.alignPos.Position = interpolatedCFrame.Position
+                -- [[ PERBAIKAN SHIFT LOCK V2 ]]
+                -- Logika terpusat untuk menggerakkan karakter, menangani bypass dan shift lock
+                local isShiftLockActive = IsShiftLockEnabled or (UserInputService and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter)
+
+                if playbackMovers.alignPos then
+                    -- Posisi selalu diupdate dari rekaman
+                    playbackMovers.alignPos.Position = interpolatedCFrame.Position
+
+                    -- Orientasi hanya diupdate jika shift lock TIDAK aktif, untuk menghindari konflik.
+                    if not isShiftLockActive then
                         playbackMovers.alignOrient.CFrame = interpolatedCFrame
                     end
+                end
+                
+                if not isAnimationBypassEnabled then
                     humanoid.WalkSpeed = originalPlaybackWalkSpeed
         
                     local requiredAnims = {}
@@ -5749,39 +5759,27 @@ task.spawn(function()
                         if not requiredAnims[id] and track.IsPlaying then track:Stop(0.1) end
                     end
                 else -- Animation Bypass is ENABLED
-                    -- Hapus animasi yang di-cache dari mode non-bypass
                     if next(animationCache) then
-                        for id, track in pairs(animationCache) do
-                            if track.IsPlaying then track:Stop(0) end
-                        end
-                        animationCache = {} -- Kosongkan cache
+                        for id, track in pairs(animationCache) do if track.IsPlaying then track:Stop(0) end end
+                        animationCache = {}
                     end
 
-                    -- Kalkulasi kecepatan dinamis dari data rekaman
                     humanoid.WalkSpeed = velocity
                     
-                    -- Tentukan state humanoid berdasarkan pergerakan vertikal
                     local heightDelta = cframeToPlay.Position.Y - cframeCurrent.Position.Y
-                    if heightDelta > 0.5 then -- Threshold untuk lompat
+                    if heightDelta > 0.5 then
                         pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end)
-                    elseif heightDelta < -1.5 then -- Threshold untuk jatuh
+                    elseif heightDelta < -1.5 then
                         pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Freefall) end)
                     else
-                        -- Jika tidak lompat atau jatuh, pastikan state-nya Running
                         if humanoid:GetState() ~= Enum.HumanoidStateType.Running then
                             pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Running) end)
                         end
                     end
                     
-                    -- Gerakkan karakter menggunakan AlignPosition dan AlignOrientation untuk FE
-                    if playbackMovers.alignPos then
-                        playbackMovers.alignPos.Position = interpolatedCFrame.Position
-                        playbackMovers.alignOrient.CFrame = interpolatedCFrame
-                        -- [PERBAIKAN] Tambahkan MoveTo untuk memberi sinyal gerakan ke Animate script
-                        pcall(humanoid.MoveTo, humanoid, interpolatedCFrame.Position)
-                    end
+                    -- [PERBAIKAN] MoveTo penting untuk memberi sinyal ke Animate script, bahkan dengan AlignPosition
+                    pcall(humanoid.MoveTo, humanoid, interpolatedCFrame.Position)
 
-                    -- Sinkronisasi kecepatan animasi lari dengan kecepatan gerak
                     if humanoid:FindFirstChild("Animator") then
                         local animator = humanoid.Animator
                         for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
