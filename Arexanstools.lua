@@ -244,7 +244,6 @@ function promptInput(message)
     Frame.BackgroundColor3 = Color3.fromRGB(20, 20, 40)
     Frame.BackgroundTransparency = 0.3
     Frame.BorderSizePixel = 0
-    Frame.ClipsDescendants = true
     
     local corner = Instance.new("UICorner", Frame)
     corner.CornerRadius = UDim.new(0, 8)
@@ -324,7 +323,6 @@ function showConfirmationPrompt(message, callback)
     Frame.BackgroundColor3 = Color3.fromRGB(25, 25, 45)
     Frame.BackgroundTransparency = 0.2
     Frame.BorderSizePixel = 0
-    Frame.ClipsDescendants = true
     
     local corner = Instance.new("UICorner", Frame); corner.CornerRadius = UDim.new(0, 8)
     local stroke = Instance.new("UIStroke", Frame); stroke.Color = Color3.fromRGB(200, 100, 100); stroke.Thickness = 1.5; stroke.Transparency = 0.5
@@ -1028,7 +1026,6 @@ task.spawn(function()
     MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
     MainFrame.BackgroundTransparency = 0.5
     MainFrame.BorderSizePixel = 0
-    MainFrame.ClipsDescendants = true
     MainFrame.Parent = ScreenGui
     MainFrame.Visible = false
     
@@ -1334,8 +1331,8 @@ task.spawn(function()
     
     local function showNotification(message, color)
         local notifFrame = Instance.new("Frame", ScreenGui)
-        notifFrame.Size = UDim2.new(0, 200, 0, 30)
-        notifFrame.Position = UDim2.new(0.5, -100, 0, -40)
+        notifFrame.Size = UDim2.new(0, 250, 0, 40)
+        notifFrame.Position = UDim2.new(0.5, -125, 0, -50)
         notifFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 25) -- Tema biru-hitam
         notifFrame.BackgroundTransparency = 0.3 -- Tema transparan
         notifFrame.BorderSizePixel = 0
@@ -1356,12 +1353,12 @@ task.spawn(function()
         notifLabel.Text = message
         notifLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
         notifLabel.Font = Enum.Font.SourceSansBold
-        notifLabel.TextSize = 12
+        notifLabel.TextSize = 14
         notifLabel.TextWrapped = true
 
         local tweenInfo = TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-        local startPosition = UDim2.new(0.5, -100, 0, -40)
-        local goalPosition = UDim2.new(0.5, -100, 0, 15)
+        local startPosition = UDim2.new(0.5, -125, 0, -50)
+        local goalPosition = UDim2.new(0.5, -125, 0, 15)
         
         notifFrame.Position = startPosition
         TweenService:Create(notifFrame, tweenInfo, {Position = goalPosition}):Play()
@@ -2199,8 +2196,7 @@ task.spawn(function()
             frame.BackgroundTransparency = 0.2
             frame.BorderSizePixel = 2
             frame.BorderColor3 = Color3.fromRGB(0, 120, 255)
-            frame.Visible = false
-            frame.ClipsDescendants = true
+            frame.Visible = false 
             frame.Parent = AnimationScreenGui
 
             local animHeader = Instance.new("TextButton", frame)
@@ -4061,12 +4057,12 @@ task.spawn(function()
             if not IsViewingPlayer or not currentlyViewedPlayer then return end
 
             if isRecording and currentRecordingTarget == currentlyViewedPlayer then
-                stopRecording(false)
+                stopRecording()
             elseif isRecording and currentRecordingTarget ~= currentlyViewedPlayer then
                 showNotification("Harus menghentikan rekaman saat ini terlebih dahulu.", Color3.fromRGB(200, 150, 50))
             else
                 switchTab("Rekaman")
-                startRecording(currentlyViewedPlayer, false)
+                startRecording(currentlyViewedPlayer)
             end
         end)
 
@@ -5378,33 +5374,31 @@ task.spawn(function()
             recordingsListFrame.CanvasPosition = scrollPos
         end
     
-        startRecording = function(targetPlayer, showNotification)
+        startRecording = function(targetPlayer)
             if isRecording then return end
             
             targetPlayer = targetPlayer or LocalPlayer -- Default ke diri sendiri jika tidak ada target
             currentRecordingTarget = targetPlayer
 
-            if showNotification then
-                -- GUI Indikator Perekaman
-                local recordingIndicatorGui = Instance.new("ScreenGui", CoreGui)
-                recordingIndicatorGui.Name = "RecordingIndicatorGUI"
-                recordingIndicatorGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-                recordingIndicatorGui.DisplayOrder = 99
-                local indicatorFrame = Instance.new("Frame", recordingIndicatorGui)
-                indicatorFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-                indicatorFrame.BackgroundTransparency = 0.5
-                indicatorFrame.Position = UDim2.new(0.5, -55, 0.1, 0)
-                indicatorFrame.Size = UDim2.new(0, 110, 0, 25)
-                local indicatorCorner = Instance.new("UICorner", indicatorFrame)
-                indicatorCorner.CornerRadius = UDim.new(0, 8)
-                local indicatorLabel = Instance.new("TextLabel", indicatorFrame)
-                indicatorLabel.Size = UDim2.new(1, 0, 1, 0)
-                indicatorLabel.BackgroundTransparency = 1
-                indicatorLabel.Font = Enum.Font.SourceSansBold
-                indicatorLabel.Text = "🔴 Recording..."
-                indicatorLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
-                indicatorLabel.TextSize = 14
-            end
+            -- GUI Indikator Perekaman
+            local recordingIndicatorGui = Instance.new("ScreenGui", CoreGui)
+            recordingIndicatorGui.Name = "RecordingIndicatorGUI"
+            recordingIndicatorGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+            recordingIndicatorGui.DisplayOrder = 99
+            local indicatorFrame = Instance.new("Frame", recordingIndicatorGui)
+            indicatorFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+            indicatorFrame.BackgroundTransparency = 0.5
+            indicatorFrame.Position = UDim2.new(0, 30, 0.15, 0)
+            indicatorFrame.Size = UDim2.new(0, 110, 0, 25)
+            local indicatorCorner = Instance.new("UICorner", indicatorFrame)
+            indicatorCorner.CornerRadius = UDim.new(0, 8)
+            local indicatorLabel = Instance.new("TextLabel", indicatorFrame)
+            indicatorLabel.Size = UDim2.new(1, 0, 1, 0)
+            indicatorLabel.BackgroundTransparency = 1
+            indicatorLabel.Font = Enum.Font.SourceSansBold
+            indicatorLabel.Text = "🔴 Recording..."
+            indicatorLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+            indicatorLabel.TextSize = 14
 
             local char = targetPlayer.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -5420,9 +5414,7 @@ task.spawn(function()
             currentRecordingData = {}
             local startTime = tick()
             recStatusLabel.Text = "Merekam: " .. targetPlayer.DisplayName .. " 🔴"
-            if showNotification then
-                showNotification("Recording started for " .. targetPlayer.DisplayName .. " (Press C to stop)", Color3.fromRGB(50, 200, 50))
-            end
+            showNotification("Recording started for " .. targetPlayer.DisplayName .. " (Press C to stop)", Color3.fromRGB(50, 200, 50))
             
             recordButton.Text = "⏹️"
             recordButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
@@ -5469,18 +5461,17 @@ task.spawn(function()
     
         local stopPlayback -- Deklarasi awal
 
-        stopRecording = function(showNotification)
+        stopRecording = function()
             if not isRecording then return end
             isRecording = false
-            if showNotification then
-                showNotification("Recording stopped.", Color3.fromRGB(200, 50, 50))
-                -- Hapus GUI Indikator Perekaman hanya jika notifikasi ditampilkan
-                local indicatorGui = CoreGui:FindFirstChild("RecordingIndicatorGUI")
-                if indicatorGui then
-                    indicatorGui:Destroy()
-                end
-            end
+            showNotification("Recording stopped.", Color3.fromRGB(200, 50, 50))
             if recordingConnection then recordingConnection:Disconnect(); recordingConnection = nil end
+            
+            -- Hapus GUI Indikator Perekaman
+            local indicatorGui = CoreGui:FindFirstChild("RecordingIndicatorGUI")
+            if indicatorGui then
+                indicatorGui:Destroy()
+            end
 
             if #currentRecordingData > 1 then
                 local baseName = (currentRecordingTarget and currentRecordingTarget.Name ~= LocalPlayer.Name) and "Rekaman " .. currentRecordingTarget.Name or "Rekaman Diri"
@@ -5558,10 +5549,6 @@ task.spawn(function()
                     pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Running) end)
                 end
             end
-            -- Re-enable shiftlock if it was active
-            if IsShiftLockEnabled and not shiftLockConnection then
-                shiftLockConnection = RunService.RenderStepped:Connect(UpdateShiftLock)
-            end
         end
 
         stopPlayback = function(isSequence) -- [[ PERBAIKAN: Terima argumen isSequence ]]
@@ -5590,12 +5577,6 @@ task.spawn(function()
         end
 
         playSingleRecording = function(recordingObject, onComplete)
-            -- Temporarily disable shiftlock to prevent jitter
-            if shiftLockConnection then
-                shiftLockConnection:Disconnect()
-                shiftLockConnection = nil
-            end
-
             local char = LocalPlayer.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
             local humanoid = char and char:FindFirstChildOfClass("Humanoid")
@@ -5620,8 +5601,8 @@ task.spawn(function()
         
             pcall(function()
                 local attachment = Instance.new("Attachment", hrp); attachment.Name = "ReplayAttachment"
-                local alignPos = Instance.new("AlignPosition", attachment); alignPos.Attachment0 = attachment; alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment; alignPos.Responsiveness = 20; alignPos.MaxForce = 100000
-                local alignOrient = Instance.new("AlignOrientation", attachment); alignOrient.Attachment0 = attachment; alignOrient.Mode = Enum.OrientationAlignmentMode.OneAttachment; alignOrient.Responsiveness = 20; alignOrient.MaxTorque = 100000
+                local alignPos = Instance.new("AlignPosition", attachment); alignPos.Attachment0 = attachment; alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment; alignPos.Responsiveness = 200; alignPos.MaxForce = 100000
+                local alignOrient = Instance.new("AlignOrientation", attachment); alignOrient.Attachment0 = attachment; alignOrient.Mode = Enum.OrientationAlignmentMode.OneAttachment; alignOrient.Responsiveness = 200; alignOrient.MaxTorque = 100000
                 playbackMovers.attachment = attachment
                 playbackMovers.alignPos = alignPos
                 playbackMovers.alignOrient = alignOrient
@@ -5726,21 +5707,11 @@ task.spawn(function()
 
                 local currentState = currentFrame.state
                 
-                -- [[ PERBAIKAN SHIFT LOCK V2 ]]
-                -- Logika terpusat untuk menggerakkan karakter, menangani bypass dan shift lock
-                local isShiftLockActive = IsShiftLockEnabled or (UserInputService and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter)
-
-                if playbackMovers.alignPos then
-                    -- Posisi selalu diupdate dari rekaman
-                    playbackMovers.alignPos.Position = interpolatedCFrame.Position
-
-                    -- Orientasi hanya diupdate jika shift lock TIDAK aktif, untuk menghindari konflik.
-                    if not isShiftLockActive then
+                if not isAnimationBypassEnabled then
+                    if playbackMovers.alignPos then
+                        playbackMovers.alignPos.Position = interpolatedCFrame.Position
                         playbackMovers.alignOrient.CFrame = interpolatedCFrame
                     end
-                end
-                
-                if not isAnimationBypassEnabled then
                     humanoid.WalkSpeed = originalPlaybackWalkSpeed
         
                     local requiredAnims = {}
@@ -5758,34 +5729,15 @@ task.spawn(function()
                     for id, track in pairs(animationCache) do
                         if not requiredAnims[id] and track.IsPlaying then track:Stop(0.1) end
                     end
-                else -- Animation Bypass is ENABLED
+                else
+                    if playbackMovers.alignPos then
+                        playbackMovers.alignPos.Position = interpolatedCFrame.Position
+                        playbackMovers.alignOrient.CFrame = interpolatedCFrame
+                    end
                     if next(animationCache) then
-                        for id, track in pairs(animationCache) do if track.IsPlaying then track:Stop(0) end end
-                        animationCache = {}
-                    end
-
-                    humanoid.WalkSpeed = velocity
-                    
-                    local heightDelta = cframeToPlay.Position.Y - cframeCurrent.Position.Y
-                    if heightDelta > 0.5 then
-                        pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end)
-                    elseif heightDelta < -1.5 then
-                        pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Freefall) end)
-                    else
-                        if humanoid:GetState() ~= Enum.HumanoidStateType.Running then
-                            pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Running) end)
-                        end
-                    end
-                    
-                    -- [PERBAIKAN] MoveTo penting untuk memberi sinyal ke Animate script, bahkan dengan AlignPosition
-                    pcall(humanoid.MoveTo, humanoid, interpolatedCFrame.Position)
-
-                    if humanoid:FindFirstChild("Animator") then
-                        local animator = humanoid.Animator
-                        for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-                            if track.Name:lower():find("run") then
-                                track:AdjustSpeed(math.clamp(velocity / 16, 0.8, 2.0))
-                            end
+                        for id, track in pairs(animationCache) do
+                            if track.IsPlaying then track:Stop(0) end
+                            animationCache[id] = nil
                         end
                     end
                 end
@@ -6082,12 +6034,12 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
         
         recordButton.MouseButton1Click:Connect(function()
             if isRecording then
-                stopRecording(false)
+                stopRecording()
             else
                 if IsViewingPlayer and currentlyViewedPlayer then
-                    startRecording(currentlyViewedPlayer, false)
+                    startRecording(currentlyViewedPlayer)
                 else
-                    startRecording(LocalPlayer, false) -- Default to self if not spectating
+                    startRecording(LocalPlayer) -- Default to self if not spectating
                 end
             end
         end)
@@ -6221,14 +6173,20 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
 
         if input.KeyCode == Enum.KeyCode.F and not UserInputService.TouchEnabled then
             if not IsFlying then StartFly() else StopFly() end
-        elseif input.KeyCode == Enum.KeyCode.C then
+        end
+    end)
+
+    ConnectEvent(UserInputService.InputBegan, function(input, processed)
+        if processed or UserInputService:GetFocusedTextBox() then return end
+
+        if input.KeyCode == Enum.KeyCode.C then
             if isRecording then
-                stopRecording(true)
+                stopRecording()
             else
                 if IsViewingPlayer and currentlyViewedPlayer then
-                    startRecording(currentlyViewedPlayer, true)
+                    startRecording(currentlyViewedPlayer)
                 else
-                    startRecording(LocalPlayer, true)
+                    startRecording(LocalPlayer)
                 end
             end
         end
@@ -6421,7 +6379,6 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
         PromptFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
         PromptFrame.BackgroundTransparency = 0.5
         PromptFrame.BorderSizePixel = 0
-        PromptFrame.ClipsDescendants = true
         PromptFrame.Parent = PasswordScreenGui
 
         local PromptCorner = Instance.new("UICorner", PromptFrame)
