@@ -1331,19 +1331,18 @@ task.spawn(function()
     
     local function showNotification(message, color)
         local notifFrame = Instance.new("Frame", ScreenGui)
-        notifFrame.Size = UDim2.new(0, 250, 0, 40)
-        notifFrame.Position = UDim2.new(0.5, -125, 0, -50)
-        notifFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 25) -- Tema biru-hitam
-        notifFrame.BackgroundTransparency = 0.3 -- Tema transparan
+        notifFrame.Size = UDim2.new(0, 180, 0, 25) -- Perkecil ukuran frame
+        notifFrame.Position = UDim2.new(0.5, -90, 0, -30) -- Sesuaikan posisi awal
+        notifFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 25)
+        notifFrame.BackgroundTransparency = 0.3
         notifFrame.BorderSizePixel = 0
         
         local corner = Instance.new("UICorner", notifFrame)
-        corner.CornerRadius = UDim.new(0, 8)
+        corner.CornerRadius = UDim.new(0, 6) -- Sedikit perkecil corner
         
         local stroke = Instance.new("UIStroke", notifFrame)
-        -- Stroke akan menggunakan warna status (merah/hijau) atau biru default
         stroke.Color = color or Color3.fromRGB(0, 150, 255) 
-        stroke.Thickness = 1.5
+        stroke.Thickness = 1
         stroke.Transparency = 0.4
         
         local notifLabel = Instance.new("TextLabel", notifFrame)
@@ -1352,13 +1351,13 @@ task.spawn(function()
         notifLabel.BackgroundTransparency = 1
         notifLabel.Text = message
         notifLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        notifLabel.Font = Enum.Font.SourceSansBold
-        notifLabel.TextSize = 14
+        notifLabel.Font = Enum.Font.SourceSans -- Ganti ke font yang lebih tipis
+        notifLabel.TextSize = 12 -- Perkecil ukuran font
         notifLabel.TextWrapped = true
 
-        local tweenInfo = TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-        local startPosition = UDim2.new(0.5, -125, 0, -50)
-        local goalPosition = UDim2.new(0.5, -125, 0, 15)
+        local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out) -- Percepat animasi
+        local startPosition = UDim2.new(0.5, -90, 0, -30) -- Sesuaikan posisi
+        local goalPosition = UDim2.new(0.5, -90, 0, 10) -- Sesuaikan posisi akhir
         
         notifFrame.Position = startPosition
         TweenService:Create(notifFrame, tweenInfo, {Position = goalPosition}):Play()
@@ -4057,12 +4056,12 @@ task.spawn(function()
             if not IsViewingPlayer or not currentlyViewedPlayer then return end
 
             if isRecording and currentRecordingTarget == currentlyViewedPlayer then
-                stopRecording()
+                stopRecording(false)
             elseif isRecording and currentRecordingTarget ~= currentlyViewedPlayer then
                 showNotification("Harus menghentikan rekaman saat ini terlebih dahulu.", Color3.fromRGB(200, 150, 50))
             else
                 switchTab("Rekaman")
-                startRecording(currentlyViewedPlayer)
+                startRecording(currentlyViewedPlayer, false)
             end
         end)
 
@@ -5374,7 +5373,7 @@ task.spawn(function()
             recordingsListFrame.CanvasPosition = scrollPos
         end
     
-        startRecording = function(targetPlayer)
+        startRecording = function(targetPlayer, showNotificationFlag)
             if isRecording then return end
             
             targetPlayer = targetPlayer or LocalPlayer -- Default ke diri sendiri jika tidak ada target
@@ -5415,7 +5414,9 @@ task.spawn(function()
             currentRecordingData = {}
             local startTime = tick()
             recStatusLabel.Text = "Merekam: " .. targetPlayer.DisplayName .. " 🔴"
-            showNotification("Recording started for " .. targetPlayer.DisplayName .. " (Press C to stop)", Color3.fromRGB(50, 200, 50))
+            if showNotificationFlag then
+                showNotification("Recording started (Press C to stop)", Color3.fromRGB(50, 200, 50))
+            end
             
             recordButton.Text = "⏹️"
             recordButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
@@ -5462,10 +5463,12 @@ task.spawn(function()
     
         local stopPlayback -- Deklarasi awal
 
-        stopRecording = function()
+        stopRecording = function(showNotificationFlag)
             if not isRecording then return end
             isRecording = false
-            showNotification("Recording stopped.", Color3.fromRGB(200, 50, 50))
+            if showNotificationFlag then
+                showNotification("Recording stopped.", Color3.fromRGB(200, 50, 50))
+            end
             if recordingConnection then recordingConnection:Disconnect(); recordingConnection = nil end
             
             -- Hapus GUI Indikator Perekaman
@@ -5700,18 +5703,16 @@ task.spawn(function()
                     interpolatedCFrame = cframeCurrent:Lerp(cframeToPlay, alpha)
                 end
 
-                -- Shiftlock Fix: Always derive orientation from camera when shiftlock is active
-                if IsShiftLockEnabled or (UserInputService and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter) then
-                    local cameraCFrame = Workspace.CurrentCamera.CFrame
-                    interpolatedCFrame = CFrame.new(interpolatedCFrame.Position) * CFrame.Angles(0, cameraCFrame:ToOrientation())
-                end
 
                 local currentState = currentFrame.state
                 
                 if not isAnimationBypassEnabled then
                     if playbackMovers.alignPos then
                         playbackMovers.alignPos.Position = interpolatedCFrame.Position
-                        playbackMovers.alignOrient.CFrame = interpolatedCFrame
+                        -- Shiftlock Fix: Only control orientation if shift lock is NOT active
+                        if not IsShiftLockEnabled and not (UserInputService and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter) then
+                            playbackMovers.alignOrient.CFrame = interpolatedCFrame
+                        end
                     end
                     humanoid.WalkSpeed = originalPlaybackWalkSpeed
         
@@ -5758,8 +5759,14 @@ task.spawn(function()
                     -- Gerakkan karakter menggunakan AlignPosition dan AlignOrientation untuk FE
                     if playbackMovers.alignPos then
                         playbackMovers.alignPos.Position = interpolatedCFrame.Position
-                        playbackMovers.alignOrient.CFrame = interpolatedCFrame
+                        -- Shiftlock Fix: Only control orientation if shift lock is NOT active
+                        if not IsShiftLockEnabled and not (UserInputService and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter) then
+                           playbackMovers.alignOrient.CFrame = interpolatedCFrame
+                        end
                     end
+                    
+                    -- Animation Bypass Smoothening: Signal movement to the Animate script
+                    pcall(function() humanoid:MoveTo(interpolatedCFrame.Position) end)
 
                     -- Sinkronisasi kecepatan animasi lari dengan kecepatan gerak
                     if humanoid:FindFirstChild("Animator") then
@@ -6064,12 +6071,12 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
         
         recordButton.MouseButton1Click:Connect(function()
             if isRecording then
-                stopRecording()
+                stopRecording(false)
             else
                 if IsViewingPlayer and currentlyViewedPlayer then
-                    startRecording(currentlyViewedPlayer)
+                    startRecording(currentlyViewedPlayer, false)
                 else
-                    startRecording(LocalPlayer) -- Default to self if not spectating
+                    startRecording(LocalPlayer, false) -- Default to self if not spectating
                 end
             end
         end)
@@ -6211,12 +6218,12 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
 
         if input.KeyCode == Enum.KeyCode.C then
             if isRecording then
-                stopRecording()
+                stopRecording(true)
             else
                 if IsViewingPlayer and currentlyViewedPlayer then
-                    startRecording(currentlyViewedPlayer)
+                    startRecording(currentlyViewedPlayer, true)
                 else
-                    startRecording(LocalPlayer)
+                    startRecording(LocalPlayer, true)
                 end
             end
         end
