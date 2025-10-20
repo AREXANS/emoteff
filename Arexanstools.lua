@@ -244,6 +244,7 @@ function promptInput(message)
     Frame.BackgroundColor3 = Color3.fromRGB(20, 20, 40)
     Frame.BackgroundTransparency = 0.3
     Frame.BorderSizePixel = 0
+    Frame.ClipsDescendants = true
     
     local corner = Instance.new("UICorner", Frame)
     corner.CornerRadius = UDim.new(0, 8)
@@ -323,6 +324,7 @@ function showConfirmationPrompt(message, callback)
     Frame.BackgroundColor3 = Color3.fromRGB(25, 25, 45)
     Frame.BackgroundTransparency = 0.2
     Frame.BorderSizePixel = 0
+    Frame.ClipsDescendants = true
     
     local corner = Instance.new("UICorner", Frame); corner.CornerRadius = UDim.new(0, 8)
     local stroke = Instance.new("UIStroke", Frame); stroke.Color = Color3.fromRGB(200, 100, 100); stroke.Thickness = 1.5; stroke.Transparency = 0.5
@@ -1026,6 +1028,7 @@ task.spawn(function()
     MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
     MainFrame.BackgroundTransparency = 0.5
     MainFrame.BorderSizePixel = 0
+    MainFrame.ClipsDescendants = true
     MainFrame.Parent = ScreenGui
     MainFrame.Visible = false
     
@@ -1331,8 +1334,8 @@ task.spawn(function()
     
     local function showNotification(message, color)
         local notifFrame = Instance.new("Frame", ScreenGui)
-        notifFrame.Size = UDim2.new(0, 250, 0, 40)
-        notifFrame.Position = UDim2.new(0.5, -125, 0, -50)
+        notifFrame.Size = UDim2.new(0, 200, 0, 30)
+        notifFrame.Position = UDim2.new(0.5, -100, 0, -40)
         notifFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 25) -- Tema biru-hitam
         notifFrame.BackgroundTransparency = 0.3 -- Tema transparan
         notifFrame.BorderSizePixel = 0
@@ -1353,12 +1356,12 @@ task.spawn(function()
         notifLabel.Text = message
         notifLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
         notifLabel.Font = Enum.Font.SourceSansBold
-        notifLabel.TextSize = 14
+        notifLabel.TextSize = 12
         notifLabel.TextWrapped = true
 
         local tweenInfo = TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-        local startPosition = UDim2.new(0.5, -125, 0, -50)
-        local goalPosition = UDim2.new(0.5, -125, 0, 15)
+        local startPosition = UDim2.new(0.5, -100, 0, -40)
+        local goalPosition = UDim2.new(0.5, -100, 0, 15)
         
         notifFrame.Position = startPosition
         TweenService:Create(notifFrame, tweenInfo, {Position = goalPosition}):Play()
@@ -2196,7 +2199,8 @@ task.spawn(function()
             frame.BackgroundTransparency = 0.2
             frame.BorderSizePixel = 2
             frame.BorderColor3 = Color3.fromRGB(0, 120, 255)
-            frame.Visible = false 
+            frame.Visible = false
+            frame.ClipsDescendants = true
             frame.Parent = AnimationScreenGui
 
             local animHeader = Instance.new("TextButton", frame)
@@ -4057,12 +4061,12 @@ task.spawn(function()
             if not IsViewingPlayer or not currentlyViewedPlayer then return end
 
             if isRecording and currentRecordingTarget == currentlyViewedPlayer then
-                stopRecording()
+                stopRecording(false)
             elseif isRecording and currentRecordingTarget ~= currentlyViewedPlayer then
                 showNotification("Harus menghentikan rekaman saat ini terlebih dahulu.", Color3.fromRGB(200, 150, 50))
             else
                 switchTab("Rekaman")
-                startRecording(currentlyViewedPlayer)
+                startRecording(currentlyViewedPlayer, false)
             end
         end)
 
@@ -5374,7 +5378,7 @@ task.spawn(function()
             recordingsListFrame.CanvasPosition = scrollPos
         end
     
-        startRecording = function(targetPlayer)
+        startRecording = function(targetPlayer, showNotification)
             if isRecording then return end
             
             targetPlayer = targetPlayer or LocalPlayer -- Default ke diri sendiri jika tidak ada target
@@ -5388,7 +5392,7 @@ task.spawn(function()
             local indicatorFrame = Instance.new("Frame", recordingIndicatorGui)
             indicatorFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
             indicatorFrame.BackgroundTransparency = 0.5
-            indicatorFrame.Position = UDim2.new(0, 180, 0.1, 0)
+            indicatorFrame.Position = UDim2.new(0, 80, 0.1, 0)
             indicatorFrame.Size = UDim2.new(0, 110, 0, 25)
             local indicatorCorner = Instance.new("UICorner", indicatorFrame)
             indicatorCorner.CornerRadius = UDim.new(0, 8)
@@ -5414,7 +5418,9 @@ task.spawn(function()
             currentRecordingData = {}
             local startTime = tick()
             recStatusLabel.Text = "Merekam: " .. targetPlayer.DisplayName .. " 🔴"
-            showNotification("Recording started for " .. targetPlayer.DisplayName .. " (Press C to stop)", Color3.fromRGB(50, 200, 50))
+            if showNotification then
+                showNotification("Recording started for " .. targetPlayer.DisplayName .. " (Press C to stop)", Color3.fromRGB(50, 200, 50))
+            end
             
             recordButton.Text = "⏹️"
             recordButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
@@ -5461,10 +5467,12 @@ task.spawn(function()
     
         local stopPlayback -- Deklarasi awal
 
-        stopRecording = function()
+        stopRecording = function(showNotification)
             if not isRecording then return end
             isRecording = false
-            showNotification("Recording stopped.", Color3.fromRGB(200, 50, 50))
+            if showNotification then
+                showNotification("Recording stopped.", Color3.fromRGB(200, 50, 50))
+            end
             if recordingConnection then recordingConnection:Disconnect(); recordingConnection = nil end
             
             -- Hapus GUI Indikator Perekaman
@@ -5601,8 +5609,8 @@ task.spawn(function()
         
             pcall(function()
                 local attachment = Instance.new("Attachment", hrp); attachment.Name = "ReplayAttachment"
-                local alignPos = Instance.new("AlignPosition", attachment); alignPos.Attachment0 = attachment; alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment; alignPos.Responsiveness = 200; alignPos.MaxForce = 100000
-                local alignOrient = Instance.new("AlignOrientation", attachment); alignOrient.Attachment0 = attachment; alignOrient.Mode = Enum.OrientationAlignmentMode.OneAttachment; alignOrient.Responsiveness = 200; alignOrient.MaxTorque = 100000
+                local alignPos = Instance.new("AlignPosition", attachment); alignPos.Attachment0 = attachment; alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment; alignPos.Responsiveness = 20; alignPos.MaxForce = 100000
+                local alignOrient = Instance.new("AlignOrientation", attachment); alignOrient.Attachment0 = attachment; alignOrient.Mode = Enum.OrientationAlignmentMode.OneAttachment; alignOrient.Responsiveness = 20; alignOrient.MaxTorque = 100000
                 playbackMovers.attachment = attachment
                 playbackMovers.alignPos = alignPos
                 playbackMovers.alignOrient = alignOrient
@@ -5758,6 +5766,8 @@ task.spawn(function()
                     if playbackMovers.alignPos then
                         playbackMovers.alignPos.Position = interpolatedCFrame.Position
                         playbackMovers.alignOrient.CFrame = interpolatedCFrame
+                        -- [PERBAIKAN] Tambahkan MoveTo untuk memberi sinyal gerakan ke Animate script
+                        pcall(humanoid.MoveTo, humanoid, interpolatedCFrame.Position)
                     end
 
                     -- Sinkronisasi kecepatan animasi lari dengan kecepatan gerak
@@ -6063,12 +6073,12 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
         
         recordButton.MouseButton1Click:Connect(function()
             if isRecording then
-                stopRecording()
+                stopRecording(false)
             else
                 if IsViewingPlayer and currentlyViewedPlayer then
-                    startRecording(currentlyViewedPlayer)
+                    startRecording(currentlyViewedPlayer, false)
                 else
-                    startRecording(LocalPlayer) -- Default to self if not spectating
+                    startRecording(LocalPlayer, false) -- Default to self if not spectating
                 end
             end
         end)
@@ -6210,12 +6220,12 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
 
         if input.KeyCode == Enum.KeyCode.C then
             if isRecording then
-                stopRecording()
+                stopRecording(true)
             else
                 if IsViewingPlayer and currentlyViewedPlayer then
-                    startRecording(currentlyViewedPlayer)
+                    startRecording(currentlyViewedPlayer, true)
                 else
-                    startRecording(LocalPlayer)
+                    startRecording(LocalPlayer, true)
                 end
             end
         end
@@ -6408,6 +6418,7 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
         PromptFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
         PromptFrame.BackgroundTransparency = 0.5
         PromptFrame.BorderSizePixel = 0
+        PromptFrame.ClipsDescendants = true
         PromptFrame.Parent = PasswordScreenGui
 
         local PromptCorner = Instance.new("UICorner", PromptFrame)
