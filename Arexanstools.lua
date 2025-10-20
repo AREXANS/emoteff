@@ -5709,13 +5709,13 @@ task.spawn(function()
                 if not isAnimationBypassEnabled then
                     if playbackMovers.alignPos then
                         playbackMovers.alignPos.Position = interpolatedCFrame.Position
-                        -- Shiftlock Fix v2: Dynamically disable/enable rotational mover
+                        -- Shiftlock Fix v3: Toggle the mover's Enabled property for better replication
                         if playbackMovers.alignOrient then
                             local isShiftLockActive = (UserInputService and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter)
                             if isShiftLockActive then
-                                playbackMovers.alignOrient.MaxTorque = 0
+                                playbackMovers.alignOrient.Enabled = false
                             else
-                                playbackMovers.alignOrient.MaxTorque = 100000 -- Restore torque
+                                playbackMovers.alignOrient.Enabled = true
                                 playbackMovers.alignOrient.CFrame = interpolatedCFrame
                             end
                         end
@@ -5765,12 +5765,12 @@ task.spawn(function()
                     -- Gerakkan karakter menggunakan AlignPosition dan AlignOrientation untuk FE
                     if playbackMovers.alignPos and playbackMovers.alignOrient then
                         playbackMovers.alignPos.Position = interpolatedCFrame.Position
-                        -- Shiftlock Fix v2: Dynamically disable/enable rotational mover
+                        -- Shiftlock Fix v3: Toggle the mover's Enabled property for better replication
                         local isShiftLockActive = (UserInputService and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter)
                         if isShiftLockActive then
-                            playbackMovers.alignOrient.MaxTorque = 0
+                            playbackMovers.alignOrient.Enabled = false
                         else
-                            playbackMovers.alignOrient.MaxTorque = 100000 -- Restore torque
+                            playbackMovers.alignOrient.Enabled = true
                             playbackMovers.alignOrient.CFrame = interpolatedCFrame
                         end
                     end
