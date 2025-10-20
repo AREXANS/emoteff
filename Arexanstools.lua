@@ -796,6 +796,11 @@ task.spawn(function()
         antiLagConnection = nil 
         IsShiftLockEnabled = false
         shiftLockConnection = nil
+
+        -- [[ FITUR BARU: SPEED LOCK ]]
+        isSpeedLockEnabled = false
+        lockedWalkSpeed = 16
+        speedLockConnection = nil
     
         -- [[ FE INVISIBLE INTEGRATION ]]
         IsFEInvisibleEnabled = false
@@ -1513,6 +1518,7 @@ task.spawn(function()
             BoostFPS = IsBoostFPSEnabled,
             FEInvisible = IsFEInvisibleEnabled,
             ShiftLock = IsShiftLockEnabled,
+            SpeedLock = isSpeedLockEnabled,
             -- [[ PERUBAHAN DIMULAI: Simpan status ESP terpisah ]]
             ESPName = IsEspNameEnabled,
             ESPBody = IsEspBodyEnabled,
@@ -1523,6 +1529,7 @@ task.spawn(function()
             AnimationTransparent = isAnimationTransparent,
             WalkSpeedValue = Settings.WalkSpeed,
             FlySpeedValue = Settings.FlySpeed,
+            LockedWalkSpeedValue = lockedWalkSpeed,
             FEInvisibleTransparencyValue = Settings.FEInvisibleTransparency
         }
         
@@ -1549,6 +1556,7 @@ task.spawn(function()
                 IsBoostFPSEnabled = decodedData.BoostFPS or false
                 IsFEInvisibleEnabled = decodedData.FEInvisible or false
                 IsShiftLockEnabled = decodedData.ShiftLock or false
+                isSpeedLockEnabled = decodedData.SpeedLock or false
                 -- [[ PERUBAHAN DIMULAI: Muat status ESP terpisah ]]
                 IsEspNameEnabled = decodedData.ESPName or false
                 IsEspBodyEnabled = decodedData.ESPBody or false
@@ -1560,6 +1568,7 @@ task.spawn(function()
                 
                 Settings.WalkSpeed = decodedData.WalkSpeedValue or 16
                 Settings.FlySpeed = decodedData.FlySpeedValue or 1
+                lockedWalkSpeed = decodedData.LockedWalkSpeedValue or 16
                 Settings.FEInvisibleTransparency = decodedData.FEInvisibleTransparencyValue or 0.75
             end
         end)
@@ -3238,6 +3247,37 @@ task.spawn(function()
         rootPart.CFrame = CFrame.new(rootPart.Position, lookAtPosition)
     end
 
+    local function ToggleSpeedLock(enabled)
+        isSpeedLockEnabled = enabled
+        saveFeatureStates()
+    
+        if enabled then
+            if not speedLockConnection then
+                speedLockConnection = RunService.Heartbeat:Connect(function()
+                    if not isSpeedLockEnabled then return end
+                    local char = LocalPlayer.Character
+                    local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+                    if humanoid and humanoid.WalkSpeed ~= lockedWalkSpeed then
+                        humanoid.WalkSpeed = lockedWalkSpeed
+                    end
+                end)
+            end
+        else
+            if speedLockConnection then
+                speedLockConnection:Disconnect()
+                speedLockConnection = nil
+            end
+            -- Kembalikan ke kecepatan jalan normal jika tidak ada fitur lain yang aktif
+            if not IsWalkSpeedEnabled then
+                local char = LocalPlayer.Character
+                local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+                if humanoid then
+                    humanoid.WalkSpeed = OriginalWalkSpeed
+                end
+            end
+        end
+    end
+
     local function ToggleShiftLock(enabled)
         IsShiftLockEnabled = enabled
         saveFeatureStates()
@@ -3255,6 +3295,14 @@ task.spawn(function()
             if shiftLockConnection then
                 shiftLockConnection:Disconnect()
                 shiftLockConnection = nil
+            end
+            -- Kembalikan ke kecepatan jalan normal jika tidak ada fitur lain yang aktif
+            if not IsWalkSpeedEnabled then
+                local char = LocalPlayer.Character
+                local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+                if humanoid then
+                    humanoid.WalkSpeed = OriginalWalkSpeed
+                end
             end
         end
     end
@@ -4860,6 +4908,8 @@ task.spawn(function()
         createToggle(GeneralTabContent, "Anti-Fling", antifling_enabled, ToggleAntiFling)
         createButton(GeneralTabContent, "Buka GUI Magnet", createMagnetGUI)
         createButton(GeneralTabContent, "Buka GUI Part Controller", createPartControllerGUI)
+        createSlider(GeneralTabContent, "Kunci Kecepatan", 0, Settings.MaxWalkSpeed, lockedWalkSpeed, "", 1, function(v) lockedWalkSpeed = v; if isSpeedLockEnabled then ToggleSpeedLock(true) end end)
+        createToggle(GeneralTabContent, "Kunci Kecepatan Aktif", isSpeedLockEnabled, ToggleSpeedLock)
     end
 
     local function setupVipTab()
