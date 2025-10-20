@@ -5384,25 +5384,27 @@ task.spawn(function()
             targetPlayer = targetPlayer or LocalPlayer -- Default ke diri sendiri jika tidak ada target
             currentRecordingTarget = targetPlayer
 
-            -- GUI Indikator Perekaman
-            local recordingIndicatorGui = Instance.new("ScreenGui", CoreGui)
-            recordingIndicatorGui.Name = "RecordingIndicatorGUI"
-            recordingIndicatorGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-            recordingIndicatorGui.DisplayOrder = 99
-            local indicatorFrame = Instance.new("Frame", recordingIndicatorGui)
-            indicatorFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-            indicatorFrame.BackgroundTransparency = 0.5
-            indicatorFrame.Position = UDim2.new(0, 80, 0.1, 0)
-            indicatorFrame.Size = UDim2.new(0, 110, 0, 25)
-            local indicatorCorner = Instance.new("UICorner", indicatorFrame)
-            indicatorCorner.CornerRadius = UDim.new(0, 8)
-            local indicatorLabel = Instance.new("TextLabel", indicatorFrame)
-            indicatorLabel.Size = UDim2.new(1, 0, 1, 0)
-            indicatorLabel.BackgroundTransparency = 1
-            indicatorLabel.Font = Enum.Font.SourceSansBold
-            indicatorLabel.Text = "🔴 Recording..."
-            indicatorLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
-            indicatorLabel.TextSize = 14
+            if showNotification then
+                -- GUI Indikator Perekaman
+                local recordingIndicatorGui = Instance.new("ScreenGui", CoreGui)
+                recordingIndicatorGui.Name = "RecordingIndicatorGUI"
+                recordingIndicatorGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+                recordingIndicatorGui.DisplayOrder = 99
+                local indicatorFrame = Instance.new("Frame", recordingIndicatorGui)
+                indicatorFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+                indicatorFrame.BackgroundTransparency = 0.5
+                indicatorFrame.Position = UDim2.new(0.5, -55, 0.1, 0)
+                indicatorFrame.Size = UDim2.new(0, 110, 0, 25)
+                local indicatorCorner = Instance.new("UICorner", indicatorFrame)
+                indicatorCorner.CornerRadius = UDim.new(0, 8)
+                local indicatorLabel = Instance.new("TextLabel", indicatorFrame)
+                indicatorLabel.Size = UDim2.new(1, 0, 1, 0)
+                indicatorLabel.BackgroundTransparency = 1
+                indicatorLabel.Font = Enum.Font.SourceSansBold
+                indicatorLabel.Text = "🔴 Recording..."
+                indicatorLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+                indicatorLabel.TextSize = 14
+            end
 
             local char = targetPlayer.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -5472,14 +5474,13 @@ task.spawn(function()
             isRecording = false
             if showNotification then
                 showNotification("Recording stopped.", Color3.fromRGB(200, 50, 50))
+                -- Hapus GUI Indikator Perekaman hanya jika notifikasi ditampilkan
+                local indicatorGui = CoreGui:FindFirstChild("RecordingIndicatorGUI")
+                if indicatorGui then
+                    indicatorGui:Destroy()
+                end
             end
             if recordingConnection then recordingConnection:Disconnect(); recordingConnection = nil end
-            
-            -- Hapus GUI Indikator Perekaman
-            local indicatorGui = CoreGui:FindFirstChild("RecordingIndicatorGUI")
-            if indicatorGui then
-                indicatorGui:Destroy()
-            end
 
             if #currentRecordingData > 1 then
                 local baseName = (currentRecordingTarget and currentRecordingTarget.Name ~= LocalPlayer.Name) and "Rekaman " .. currentRecordingTarget.Name or "Rekaman Diri"
@@ -5557,6 +5558,10 @@ task.spawn(function()
                     pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Running) end)
                 end
             end
+            -- Re-enable shiftlock if it was active
+            if IsShiftLockEnabled and not shiftLockConnection then
+                shiftLockConnection = RunService.RenderStepped:Connect(UpdateShiftLock)
+            end
         end
 
         stopPlayback = function(isSequence) -- [[ PERBAIKAN: Terima argumen isSequence ]]
@@ -5585,6 +5590,12 @@ task.spawn(function()
         end
 
         playSingleRecording = function(recordingObject, onComplete)
+            -- Temporarily disable shiftlock to prevent jitter
+            if shiftLockConnection then
+                shiftLockConnection:Disconnect()
+                shiftLockConnection = nil
+            end
+
             local char = LocalPlayer.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
             local humanoid = char and char:FindFirstChildOfClass("Humanoid")
@@ -6212,13 +6223,7 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
 
         if input.KeyCode == Enum.KeyCode.F and not UserInputService.TouchEnabled then
             if not IsFlying then StartFly() else StopFly() end
-        end
-    end)
-
-    ConnectEvent(UserInputService.InputBegan, function(input, processed)
-        if processed or UserInputService:GetFocusedTextBox() then return end
-
-        if input.KeyCode == Enum.KeyCode.C then
+        elseif input.KeyCode == Enum.KeyCode.C then
             if isRecording then
                 stopRecording(true)
             else
