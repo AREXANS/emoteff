@@ -5988,7 +5988,7 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
                                 end
                             end
                             if trackName:find("run") then
-                                track:AdjustSpeed(math.clamp(velocity / 16, 0.8, 2.0))
+                                track:AdjustSpeed(math.clamp(velocity / 25, 0.8, 1.2))
                             end
                         end
                     end
