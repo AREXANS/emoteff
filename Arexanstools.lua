@@ -4,215 +4,20 @@ local RunService = game:GetService("RunService")
 local isSmoothPaused = false
 local lastFrame, nextFrame
 
-local function smoothReset(rootPart)
-    if not rootPart then return end
-    local alignPos = rootPart:FindFirstChild("PlaybackAlignPos")
-    local alignOri = rootPart:FindFirstChild("PlaybackAlignOri")
-    if alignPos then
-        alignPos.Position = rootPart.Position
-        alignPos.Responsiveness = 150
-    end
-    if alignOri then
-        alignOri.CFrame = rootPart.CFrame
-        alignOri.Responsiveness = 150
-    end
-end
-
-function pausePlayback()
-    isPaused = true
-    isSmoothPaused = true
-    local char = game.Players.LocalPlayer.Character
-    if char then
-        local humanoid = char:FindFirstChildOfClass("Humanoid")
-        if humanoid then
-            humanoid:Move(Vector3.new(0,0,0))
-            humanoid:ChangeState(Enum.HumanoidStateType.Idle)
-            humanoid.WalkSpeed = 0
-        end
-    end
-end
-
-function resumePlayback()
-    isPaused = false
-    task.wait(0.05)
-    isSmoothPaused = false
-end
-
 function playNextRecording()
     if nextRecordingIndex then
-        local char = game.Players.LocalPlayer.Character
-        local rootPart = char and char:FindFirstChild("HumanoidRootPart")
-        if rootPart then smoothReset(rootPart) end
         task.wait(0.15)
         playRecording(nextRecordingIndex)
     end
 end
 
 -- Playback Loop Baru
-task.spawn(function()
-    RunService.RenderStepped:Connect(function(dt)
-        if isPaused or isSmoothPaused then return end
-        if IsPlaybackActive then return end
-        local player = game.Players.LocalPlayer
-        local char = player.Character
-        if not char then return end
-        local humanoid = char:FindFirstChildOfClass("Humanoid")
-        local rootPart = char:FindFirstChild("HumanoidRootPart")
-        if humanoid and rootPart and currentFrame and nextFrame then
-            local cf1 = CFrame.new(unpack(currentFrame.cframe))
-            local cf2 = CFrame.new(unpack(nextFrame.cframe))
-            local pos1, pos2 = cf1.Position, cf2.Position
-            local dist = (pos2 - pos1).Magnitude
-            local timeDelta = math.max(nextFrame.time - currentFrame.time, 0.016)
-            local dynamicSpeed = math.clamp((dist / timeDelta) * 1.15, 6, 22)
-            humanoid.WalkSpeed = dynamicSpeed
-
-            -- Tangani animasi lompat alami
-            local heightDelta = pos2.Y - pos1.Y
-            if heightDelta > 2 then
-                pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end)
-            elseif heightDelta < -2 then
-                pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Freefall) end)
-            else
-                -- Do not force Running here; let Animate select Walk vs Run based on WalkSpeed
-                if isAnimationBypassEnabled then
-                    pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Running) end)
-                end
-            end
-
-
-
-            -- Interpolasi halus posisi & orientasi
-            local alpha = math.clamp(dt / timeDelta, 0, 1)
-            local newCF = cf1:Lerp(cf2, alpha * 0.3 + 0.7)
-            rootPart.CFrame = rootPart.CFrame:Lerp(newCF, 0.35)
-
-            -- ✅ Dynamic FE Run Sync Patch v5 (Smooth & Realistic)
-if isAnimationBypassEnabled then
-    -- Hitung kecepatan aktual dari rekaman
-    local bypassSpeed = math.clamp((dist / timeDelta) * 1.15, 10, 30)
-    humanoid.WalkSpeed = bypassSpeed
-
-    -- Tentukan state sesuai gerakan vertikal
-    if heightDelta > 2 then
-        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-    elseif heightDelta < -2 then
-        humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
-    else
-        humanoid:ChangeState(Enum.HumanoidStateType.Running)
-    end
-
-    -- Posisi target dengan prediksi arah
-    local nextPos = newCF.Position + rootPart.CFrame.LookVector * 0.05
-
-    -- Tambahkan sedikit dorongan velocity agar animasi sinkron
-    local moveDir = (pos2 - pos1).Unit
-    rootPart.Velocity = moveDir * bypassSpeed * 1.1
-
-    -- Jalankan MoveTo agar server mengupdate posisi (FE)
-    humanoid:MoveTo(nextPos)
-
-    -- Perbaiki AlignPos agar tidak delay
-    local alignPos = rootPart:FindFirstChild("PlaybackAlignPos")
-    if alignPos then
-        alignPos.Position = nextPos
-        alignPos.Responsiveness = 500
-    end
-
-    -- Tambahan: paksa animasi “running” aktif
-    if humanoid:FindFirstChild("Animator") then
-        local animator = humanoid.Animator
-        for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-            if track.Name:lower():find("run") then
-                track:AdjustSpeed(math.clamp(bypassSpeed / 16, 0.8, 2.2))
-            end
-        end
-    end
-end
-        end
-    end)
-end)
 
 
 
 --[[
-🔥 PATCH v2: Smooth Multi-Playback & Pause/Resume Fix
-===================================================
-- Peralihan antar rekaman sekarang halus, tanpa reset mendadak.
-- Pause/Resume kini menjaga posisi dan physics karakter agar tidak freeze atau teleport.
-- Kecepatan langkah (WalkSpeed) disesuaikan ulang setiap kali lanjut atau ganti rekaman.
-- Penambahan fungsi smoothReset(), pausePlayback(), resumePlayback(), dan playNextRecording().
---]]
-
-local isSmoothPaused = false
-
-local function smoothReset(rootPart)
-    if not rootPart then return end
-    local alignPos = rootPart:FindFirstChild("PlaybackAlignPos")
-    local alignOri = rootPart:FindFirstChild("PlaybackAlignOri")
-    if alignPos then
-        alignPos.Position = rootPart.Position
-        alignPos.Responsiveness = 100
-    end
-    if alignOri then
-        alignOri.CFrame = rootPart.CFrame
-        alignOri.Responsiveness = 100
-    end
-end
-
-function pausePlayback()
-    isPaused = true
-    isSmoothPaused = true
-    local char = game.Players.LocalPlayer.Character
-    if char then
-        local humanoid = char:FindFirstChildOfClass("Humanoid")
-        local rootPart = char:FindFirstChild("HumanoidRootPart")
-        if humanoid then
-            humanoid:Move(Vector3.new(0,0,0))
-            humanoid.WalkSpeed = 0
-        end
-        if rootPart then smoothReset(rootPart) end
-    end
-end
-
-function resumePlayback()
-    isPaused = false
-    task.wait(0.05)
-    isSmoothPaused = false
-end
-
-function playNextRecording()
-    if nextRecordingIndex then
-        local char = game.Players.LocalPlayer.Character
-        local rootPart = char and char:FindFirstChild("HumanoidRootPart")
-        if rootPart then smoothReset(rootPart) end
-        task.wait(0.1)
-        playRecording(nextRecordingIndex)
-    end
-end
 
 -- Integrasi ke playback utama (disisipkan di loop RunService.RenderStepped)
-task.spawn(function()
-    local RunService = game:GetService("RunService")
-    RunService.RenderStepped:Connect(function(dt)
-        if isPaused or isSmoothPaused then return end
-        if IsPlaybackActive then return end
-        local player = game.Players.LocalPlayer
-        local char = player.Character
-        if not char then return end
-        local humanoid = char:FindFirstChildOfClass("Humanoid")
-        local rootPart = char:FindFirstChild("HumanoidRootPart")
-        if humanoid and rootPart and currentFrame and nextFrame then
-            local distanceDelta = (CFrame.new(unpack(nextFrame.cframe)).Position - CFrame.new(unpack(currentFrame.cframe)).Position).Magnitude
-            local timeDelta = math.max(nextFrame.time - currentFrame.time, 0.001)
-            local dynamicSpeed = math.clamp(distanceDelta / timeDelta * 1.2, 6, 20)
-            humanoid.WalkSpeed = dynamicSpeed
-            local alpha = math.clamp(dt / timeDelta, 0, 1)
-            local interpolatedCFrame = CFrame.new(unpack(currentFrame.cframe)):Lerp(CFrame.new(unpack(nextFrame.cframe)), alpha)
-            rootPart.CFrame = rootPart.CFrame:Lerp(interpolatedCFrame, 0.25)
-        end
-    end)
-end)
 
 
 
@@ -5508,185 +5313,65 @@ task.spawn(function()
             recordingsListFrame.CanvasPosition = scrollPos
         end
     
-        startRecording = function(targetPlayer, showNotificationFlag)
-            if isRecording then return end
-            
-            targetPlayer = targetPlayer or LocalPlayer -- Default ke diri sendiri jika tidak ada target
-            currentRecordingTarget = targetPlayer
-
-            -- GUI Indikator Perekaman
-            local recordingIndicatorGui = Instance.new("ScreenGui", CoreGui)
-            recordingIndicatorGui.Name = "RecordingIndicatorGUI"
-            recordingIndicatorGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-            recordingIndicatorGui.DisplayOrder = 99
-            local indicatorFrame = Instance.new("Frame", recordingIndicatorGui)
-            indicatorFrame.AnchorPoint = Vector2.new(1, 0)
-            indicatorFrame.Position = UDim2.new(1, -10, 0, 10)
-            indicatorFrame.Size = UDim2.new(0, 110, 0, 25)
-            indicatorFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-            indicatorFrame.BackgroundTransparency = 0.5
-            local indicatorCorner = Instance.new("UICorner", indicatorFrame)
-            indicatorCorner.CornerRadius = UDim.new(0, 8)
-            local indicatorLabel = Instance.new("TextLabel", indicatorFrame)
-            indicatorLabel.Size = UDim2.new(1, 0, 1, 0)
-            indicatorLabel.BackgroundTransparency = 1
-            indicatorLabel.Font = Enum.Font.SourceSansBold
-            indicatorLabel.Text = "🔴 Recording..."
-            indicatorLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
-            indicatorLabel.TextSize = 14
-
-            local char = targetPlayer.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-
-            if not (hrp and humanoid) then
-                recStatusLabel.Text = "Karakter target tidak ditemukan."
-                currentRecordingTarget = nil
-                return
-            end
-            
-            isRecording = true
-            currentRecordingData = {}
-            local startTime = tick()
-            recStatusLabel.Text = "Merekam: " .. targetPlayer.DisplayName .. " 🔴"
-            if showNotificationFlag then
-                showNotification("Recording started (Press C to stop)", Color3.fromRGB(50, 200, 50))
-            end
-            
-            recordButton.Text = "⏹️"
-            recordButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-
-            local lastPosition = hrp.Position
-            local TELEPORT_THRESHOLD = 50 
-
-            recordingConnection = RunService.Heartbeat:Connect(function()
-                if not isRecording then return end
-                
-                -- [[ PERUBAHAN PENTING: Pastikan target masih valid ]]
-                char = currentRecordingTarget and currentRecordingTarget.Character
-                hrp = char and char:FindFirstChild("HumanoidRootPart")
-                humanoid = char and char:FindFirstChildOfClass("Humanoid")
-                if not (hrp and humanoid and humanoid.Health > 0) then
-                    recStatusLabel.Text = "Target hilang, perekaman dihentikan."
-                    stopActions()
-                    return
-                end
-
-                local currentCFrame = hrp.CFrame
-                local currentPosition = currentCFrame.Position
-                local distance = (currentPosition - lastPosition).Magnitude
-                
-                local frameData = {
-                    time = tick() - startTime,
-                    cframe = {currentCFrame:GetComponents()},
-                    state = tostring(humanoid:GetState()),
-                    anims = {}
-                }
-
-                if distance > TELEPORT_THRESHOLD then
-                    frameData.isTeleport = true
-                end
-
-                for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
-                    table.insert(frameData.anims, {id = track.Animation.AnimationId, time = track.TimePosition})
-                end
-                
-                table.insert(currentRecordingData, frameData)
-                lastPosition = currentPosition
-            end)
-        end
     
         local stopPlayback -- Deklarasi awal
 
-        stopRecording = function(showNotificationFlag)
-            if not isRecording then return end
-            isRecording = false
-            if showNotificationFlag then
-                showNotification("Recording stopped.", Color3.fromRGB(200, 50, 50))
-            end
-            if recordingConnection then recordingConnection:Disconnect(); recordingConnection = nil end
-            
-            -- Hapus GUI Indikator Perekaman
-            local indicatorGui = CoreGui:FindFirstChild("RecordingIndicatorGUI")
-            if indicatorGui then
-                indicatorGui:Destroy()
-            end
-
-            if #currentRecordingData > 1 then
-                local baseName = (currentRecordingTarget and currentRecordingTarget.Name ~= LocalPlayer.Name) and "Rekaman " .. currentRecordingTarget.Name or "Rekaman Diri"
-                local newName, i = baseName .. " 1", 1
-                while savedRecordings[newName] do i += 1; newName = baseName .. " " .. i end
-                
-                local recordingObject = {
-                    frames = currentRecordingData,
-                    targetUserId = currentRecordingTarget.UserId
-                }
-                savedRecordings[newName] = recordingObject
-                
-                saveRecordingsData()
-                recStatusLabel.Text = "Rekaman disimpan sebagai: " .. newName
-                updateRecordingsList()
-            else
-                recStatusLabel.Text = "Perekaman dibatalkan (terlalu singkat)."
-            end
-            currentRecordingData = {}
-            currentRecordingTarget = nil -- Reset target
-            
-            recordButton.Text = "🔴"
-            recordButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-        end
 
         local cleanupSinglePlayback -- Deklarasi awal
         
         cleanupSinglePlayback = function(isSequence)
-            isSequence = isSequence or false -- Default to false
-            if playbackMovers.guidePart and playbackMovers.guidePart.Parent then
-                playbackMovers.guidePart:Destroy()
+            isSequence = isSequence or false
+
+            -- Disable movers before destroying to release control smoothly
+            if playbackMovers.alignPos then pcall(function() playbackMovers.alignPos.Enabled = false end) end
+            if playbackMovers.alignOrient then pcall(function() playbackMovers.alignOrient.Enabled = false end) end
+            task.wait(0.05) -- Wait a couple frames for physics to settle
+
+            -- Destroy all playback-related instances
+            for _, mover in pairs(playbackMovers) do
+                if mover and mover.Parent then pcall(function() mover:Destroy() end) end
             end
-            if playbackMovers.attachment and playbackMovers.attachment.Parent then
-                playbackMovers.attachment:Destroy()
-            end
-            if playbackMovers.alignPos and playbackMovers.alignPos.Parent then
-                playbackMovers.alignPos:Destroy()
-            end
-            if playbackMovers.alignOrient and playbackMovers.alignOrient.Parent then
-                playbackMovers.alignOrient:Destroy()
-            end
-            -- Clear movers table
             playbackMovers = {}
 
             local char = LocalPlayer.Character
-            if char then
-                local humanoid = char:FindFirstChildOfClass("Humanoid")
-                if humanoid then
-                    humanoid.WalkSpeed = originalPlaybackWalkSpeed
-                    humanoid.PlatformStand = false
-                    -- [[ PERBAIKAN: Hanya hentikan animasi jika bukan bagian dari sekuens ]]
-                    if not isSequence then
-                        for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
-                            track:Stop(0.1)
-                        end
+            if not char then return end
+
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
+
+            -- Clean up sound
+            if hrp then
+                local customSound = hrp:FindFirstChild("CustomRunningSound")
+                if customSound then pcall(function() customSound:Destroy() end) end
+            end
+
+            if humanoid then
+                humanoid.WalkSpeed = originalPlaybackWalkSpeed
+                humanoid.PlatformStand = false
+                humanoid.AutoRotate = true
+
+                if not isSequence then
+                    for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
+                        pcall(function() track:Stop(0.1) end)
                     end
                 end
+            end
 
-                local hrp = char:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    local customRunningSound = hrp:FindFirstChild("CustomRunningSound")
-                    if customRunningSound then
-                        customRunningSound:Destroy()
-                    end
-                end
-
-
-                -- Additional cleanup: ensure HRP velocity/anchored reset and humanoid is usable
-                if hrp then
-                    pcall(function() hrp.Velocity = Vector3.new(0,0,0) end)
-                    pcall(function() hrp.Anchored = false end)
-                end
-                if humanoid then
-                    pcall(function() humanoid.AutoRotate = true end)
-                    pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Running) end)
-                end
+            -- Force physics state reset and return network ownership
+            if hrp then
+                pcall(function()
+                    hrp.Velocity = Vector3.new(0, 0, 0)
+                    hrp.RotVelocity = Vector3.new(0, 0, 0)
+                    hrp.Anchored = false
+                    hrp:SetNetworkOwner(nil) -- Return control explicitly
+                end)
+            end
+            
+            -- Force the humanoid into a controllable state
+            if humanoid and humanoid:GetState() ~= Enum.HumanoidStateType.Dead then
+                pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.GettingUp) end)
+                task.wait()
+                pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Running) end)
             end
         end
 
@@ -5715,238 +5400,6 @@ task.spawn(function()
             stopPlayback()
         end
 
-        playSingleRecording = function(recordingObject, onComplete)
-            local char = LocalPlayer.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-            if not (hrp and humanoid) then if onComplete then onComplete() end; return end
-        
-            originalPlaybackWalkSpeed = humanoid.WalkSpeed
-            IsPlaybackActive = true
-            local animateScript = char and char:FindFirstChild("Animate")
-            if animateScript then
-                savedAnimateDisabled = animateScript.Disabled
-                pcall(function() animateScript.Disabled = false end)
-            end
-        
-            local recordingData = recordingObject.frames or recordingObject
-            if not recordingData or #recordingData < 1 then if onComplete then onComplete() end; return end
-        
-            local recordingDuration = recordingData[#recordingData].time
-            if recordingDuration <= 0 then if onComplete then onComplete() end; return end
-        
-            local animationCache = {}
-            playbackMovers = {}
-        
-            pcall(function()
-                local attachment = Instance.new("Attachment", hrp); attachment.Name = "ReplayAttachment"
-                local alignPos = Instance.new("AlignPosition", attachment); alignPos.Attachment0 = attachment; alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment; alignPos.Responsiveness = 200; alignPos.MaxForce = 100000
-                local alignOrient = Instance.new("AlignOrientation", attachment); alignOrient.Attachment0 = attachment; alignOrient.Mode = Enum.OrientationAlignmentMode.OneAttachment; alignOrient.Responsiveness = 200; alignOrient.MaxTorque = 100000
-                playbackMovers.attachment = attachment
-                playbackMovers.alignPos = alignPos
-                playbackMovers.alignOrient = alignOrient
-            end)
-        
-            if isAnimationBypassEnabled then
-                pcall(function()
-                    local guidePart = Instance.new("Part"); guidePart.Name = "PlaybackGuidePart"; guidePart.Size = Vector3.new(1,1,1); guidePart.Transparency = 1; guidePart.CanCollide = false; guidePart.Anchored = true; guidePart.Parent = workspace
-                    playbackMovers.guidePart = guidePart
-                end)
-            end
-        
-            local soundJumping, soundLanding, customRunningSound
-            pcall(function()
-                soundJumping = hrp:FindFirstChild("Jumping")
-                soundLanding = hrp:FindFirstChild("FreeFalling")
-                customRunningSound = Instance.new("Sound", hrp); customRunningSound.Name = "CustomRunningSound"; customRunningSound.Looped = true
-                local originalRunningSound = hrp:FindFirstChild("Running")
-                if originalRunningSound and originalRunningSound:IsA("Sound") then
-                    customRunningSound.SoundId = originalRunningSound.SoundId; customRunningSound.Volume = originalRunningSound.Volume; customRunningSound.Pitch = originalRunningSound.Pitch
-                else
-                    customRunningSound.SoundId = "rbxassetid://122226169"
-                end
-            end)
-            
-            local lastPlayerState = "Idle"
-            local loopStartTime = tick()
-            local lastFrameIndex = 1
-            local wasPaused = false
-            
-            playbackConnection = RunService.RenderStepped:Connect(function(dt)
-                if not isPlaying then
-                    if playbackConnection then playbackConnection:Disconnect(); playbackConnection = nil end
-                    return 
-                end
-        
-                if isPaused then
-                    if not wasPaused then 
-                        if playbackMovers.alignPos then playbackMovers.alignPos.MaxForce = 0 end
-                        if playbackMovers.alignOrient then playbackMovers.alignOrient.MaxTorque = 0 end
-                        if customRunningSound and customRunningSound.IsPlaying then customRunningSound:Stop() end
-                        for _, track in pairs(animationCache) do if track.IsPlaying then track:Stop(0.1) end end
-                        wasPaused = true
-                    end
-                    loopStartTime = loopStartTime + dt 
-                    return 
-                end
-        
-                if wasPaused then 
-                    if playbackMovers.alignPos then playbackMovers.alignPos.MaxForce = 100000 end
-                    if playbackMovers.alignOrient then playbackMovers.alignOrient.MaxTorque = 100000 end
-                    wasPaused = false
-                end
-        
-                local elapsedTime = tick() - loopStartTime
-                
-                if elapsedTime >= recordingDuration then
-                    if playbackConnection then playbackConnection:Disconnect(); playbackConnection = nil end
-                    cleanupSinglePlayback(onComplete ~= nil)
-                    if onComplete then onComplete() end
-                    return
-                end
-                
-                local frameToPlay, currentFrame
-                for i = lastFrameIndex, #recordingData do
-                    if recordingData[i].time >= elapsedTime then
-                        frameToPlay = recordingData[i]
-                        currentFrame = recordingData[i-1] or recordingData[1]
-                        lastFrameIndex = i
-                        break
-                    end
-                end
-                
-                if not frameToPlay then
-                    frameToPlay = recordingData[#recordingData]
-                    currentFrame = recordingData[#recordingData]
-                end
-        
-                local cframeToPlay = CFrame.new(unpack(frameToPlay.cframe))
-                local cframeCurrent = CFrame.new(unpack(currentFrame.cframe))
-                
-                local velocity = 0
-                local timeDelta = frameToPlay.time - currentFrame.time
-                if timeDelta > 0.001 then
-                    velocity = (cframeToPlay.Position - cframeCurrent.Position).Magnitude / timeDelta
-                end
-                
-                local interpolatedCFrame
-                if frameToPlay.isTeleport then
-                    interpolatedCFrame = cframeToPlay
-                    loopStartTime = tick() - frameToPlay.time
-                else
-                    local alpha = math.clamp((elapsedTime - currentFrame.time) / timeDelta, 0, 1)
-                    interpolatedCFrame = cframeCurrent:Lerp(cframeToPlay, alpha)
-                end
-
-
-                local currentState = currentFrame.state
-                
-                if not isAnimationBypassEnabled then
-                    if playbackMovers.alignPos then
-                        playbackMovers.alignPos.Position = interpolatedCFrame.Position
-                        -- Shiftlock Fix v3: Toggle the mover's Enabled property for better replication
-                        if playbackMovers.alignOrient then
-                            local isShiftLockActive = (UserInputService and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter)
-                            if isShiftLockActive then
-                                playbackMovers.alignOrient.Enabled = false
-                            else
-                                playbackMovers.alignOrient.Enabled = true
-                                playbackMovers.alignOrient.CFrame = interpolatedCFrame
-                            end
-                        end
-                    end
-                    humanoid.WalkSpeed = originalPlaybackWalkSpeed
-        
-                    local requiredAnims = {}
-                    for _, animData in ipairs(currentFrame.anims) do
-                        requiredAnims[animData.id] = animData.time
-                        if not animationCache[animData.id] then
-                            local anim = Instance.new("Animation"); anim.AnimationId = animData.id
-                            animationCache[animData.id] = humanoid:LoadAnimation(anim)
-                        end
-                        local track = animationCache[animData.id]
-                        if not track.IsPlaying then track:Play(0.1) end
-                        track:AdjustSpeed(velocity / (originalPlaybackWalkSpeed > 0 and originalPlaybackWalkSpeed or 16))
-                        track.TimePosition = animData.time
-                    end
-                    for id, track in pairs(animationCache) do
-                        if not requiredAnims[id] and track.IsPlaying then track:Stop(0.1) end
-                    end
-                else -- Animation Bypass is ENABLED
-                    -- Hapus animasi yang di-cache dari mode non-bypass
-                    if next(animationCache) then
-                        for id, track in pairs(animationCache) do
-                            if track.IsPlaying then track:Stop(0) end
-                        end
-                        animationCache = {} -- Kosongkan cache
-                    end
-
-                    -- Kalkulasi kecepatan dinamis dari data rekaman
-                    humanoid.WalkSpeed = velocity
-                    
-                    -- Tentukan state humanoid berdasarkan pergerakan vertikal
-                    local heightDelta = cframeToPlay.Position.Y - cframeCurrent.Position.Y
-                    if heightDelta > 0.5 then -- Threshold untuk lompat
-                        pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end)
-                    elseif heightDelta < -1.5 then -- Threshold untuk jatuh
-                        pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Freefall) end)
-                    else
-                        -- Jika tidak lompat atau jatuh, pastikan state-nya Running
-                        if humanoid:GetState() ~= Enum.HumanoidStateType.Running then
-                            pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Running) end)
-                        end
-                    end
-                    
-                    -- Gerakkan karakter menggunakan AlignPosition dan AlignOrientation untuk FE
-                    if playbackMovers.alignPos and playbackMovers.alignOrient then
-                        playbackMovers.alignPos.Position = interpolatedCFrame.Position
-                        -- Shiftlock Fix v3: Toggle the mover's Enabled property for better replication
-                        local isShiftLockActive = (UserInputService and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter)
-                        if isShiftLockActive then
-                            playbackMovers.alignOrient.Enabled = false
-                        else
-                            playbackMovers.alignOrient.Enabled = true
-                            playbackMovers.alignOrient.CFrame = interpolatedCFrame
-                        end
-                    end
-                    
-                    -- Animation Bypass Smoothening: Signal movement to the Animate script
-                    pcall(function() humanoid:MoveTo(interpolatedCFrame.Position) end)
-
-                    -- Sinkronisasi kecepatan animasi lari dengan kecepatan gerak
-                    if humanoid:FindFirstChild("Animator") then
-                        local animator = humanoid.Animator
-                        for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-                            if track.Name:lower():find("run") then
-                                track:AdjustSpeed(math.clamp(velocity / 16, 0.8, 2.0))
-                            end
-                        end
-                    end
-                end
-        
-                pcall(function()
-                    if currentState and currentState ~= lastPlayerState then
-                        local stateName = currentState:match("Enum.HumanoidStateType%.(.*)")
-                        if stateName and Enum.HumanoidStateType[stateName] then
-                            humanoid:ChangeState(Enum.HumanoidStateType[stateName])
-                        end
-                        if currentState == "Enum.HumanoidStateType.Jumping" and soundJumping then soundJumping:Play() end
-                        if lastPlayerState == "Enum.HumanoidStateType.Freefall" and currentState ~= "Enum.HumanoidStateType.Jumping" and soundLanding then soundLanding:Play() end
-                    end
-                    
-                    if customRunningSound then
-                        local isRunning = (currentState == "Enum.HumanoidStateType.Running" or currentState == "Enum.HumanoidStateType.RunningNoPhysics")
-                        if isRunning and velocity > 1 and not customRunningSound.IsPlaying then
-                            customRunningSound.PlaybackSpeed = velocity / (originalPlaybackWalkSpeed > 0 and originalPlaybackWalkSpeed or 16)
-                            customRunningSound:Play()
-                        elseif (not isRunning or velocity <= 1) and customRunningSound.IsPlaying then
-                            customRunningSound:Stop()
-                        end
-                    end
-                    lastPlayerState = currentState
-                end)
-            end)
-        end
 
         playSequence = function(replayCountBox)
             if isPlaying then return end
@@ -5994,6 +5447,11 @@ task.spawn(function()
                         recStatusLabel.Text = "Pemutaran sekuens selesai."
                         return
                     end
+                    
+                    -- Reset state for smooth looping by performing a full cleanup
+                    cleanupSinglePlayback(false) 
+                    task.wait(0.2) -- Short delay to ensure full reset
+
                     currentSequenceIndex = 1
                     recStatusLabel.Text = string.format("Memutar sekuens: %d/%s", currentPlayRun, tostring(replayCount) == "inf" and "∞" or tostring(replayCount))
                 end
@@ -6161,6 +5619,372 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
                 warn("Export Error:", writeError)
             end
         end)
+        local stopRecording, stopPlayback -- Deklarasi awal
+
+        startRecording = function(targetPlayer, showNotificationFlag)
+            if isRecording then return end
+            
+            targetPlayer = targetPlayer or LocalPlayer -- Default ke diri sendiri jika tidak ada target
+            currentRecordingTarget = targetPlayer
+
+            -- GUI Indikator Perekaman
+            local recordingIndicatorGui = Instance.new("ScreenGui", CoreGui)
+            recordingIndicatorGui.Name = "RecordingIndicatorGUI"
+            recordingIndicatorGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+            recordingIndicatorGui.DisplayOrder = 99
+            local indicatorFrame = Instance.new("Frame", recordingIndicatorGui)
+            indicatorFrame.AnchorPoint = Vector2.new(1, 0)
+            indicatorFrame.Position = UDim2.new(1, -10, 0, 10)
+            indicatorFrame.Size = UDim2.new(0, 110, 0, 25)
+            indicatorFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+            indicatorFrame.BackgroundTransparency = 0.5
+            local indicatorCorner = Instance.new("UICorner", indicatorFrame)
+            indicatorCorner.CornerRadius = UDim.new(0, 8)
+            local indicatorLabel = Instance.new("TextLabel", indicatorFrame)
+            indicatorLabel.Size = UDim2.new(1, 0, 1, 0)
+            indicatorLabel.BackgroundTransparency = 1
+            indicatorLabel.Font = Enum.Font.SourceSansBold
+            indicatorLabel.Text = "🔴 Recording..."
+            indicatorLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+            indicatorLabel.TextSize = 14
+
+            local char = targetPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+
+            if not (hrp and humanoid) then
+                recStatusLabel.Text = "Karakter target tidak ditemukan."
+                currentRecordingTarget = nil
+                return
+            end
+            
+            isRecording = true
+            currentRecordingData = {}
+            local startTime = tick()
+            recStatusLabel.Text = "Merekam: " .. targetPlayer.DisplayName .. " 🔴"
+            if showNotificationFlag then
+                showNotification("Recording started (Press C to stop)", Color3.fromRGB(50, 200, 50))
+            end
+            
+            recordButton.Text = "⏹️"
+            recordButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+
+            local lastPosition = hrp.Position
+            local TELEPORT_THRESHOLD = 50 
+
+            recordingConnection = RunService.Heartbeat:Connect(function()
+                if not isRecording then return end
+                
+                -- [[ PERUBAHAN PENTING: Pastikan target masih valid ]]
+                char = currentRecordingTarget and currentRecordingTarget.Character
+                hrp = char and char:FindFirstChild("HumanoidRootPart")
+                humanoid = char and char:FindFirstChildOfClass("Humanoid")
+                if not (hrp and humanoid and humanoid.Health > 0) then
+                    recStatusLabel.Text = "Target hilang, perekaman dihentikan."
+                    stopActions()
+                    return
+                end
+
+                local currentCFrame = hrp.CFrame
+                local currentPosition = currentCFrame.Position
+                local distance = (currentPosition - lastPosition).Magnitude
+                
+                local frameData = {
+                    time = tick() - startTime,
+                    cframe = {currentCFrame:GetComponents()},
+                    state = tostring(humanoid:GetState()),
+                    anims = {}
+                }
+
+                if distance > TELEPORT_THRESHOLD then
+                    frameData.isTeleport = true
+                end
+
+                for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
+                    table.insert(frameData.anims, {id = track.Animation.AnimationId, time = track.TimePosition})
+                end
+                
+                table.insert(currentRecordingData, frameData)
+                lastPosition = currentPosition
+            end)
+        end
+
+        stopRecording = function(showNotificationFlag)
+            if not isRecording then return end
+            isRecording = false
+            if showNotificationFlag then
+                showNotification("Recording stopped.", Color3.fromRGB(200, 50, 50))
+            end
+            if recordingConnection then recordingConnection:Disconnect(); recordingConnection = nil end
+            
+            -- Hapus GUI Indikator Perekaman
+            local indicatorGui = CoreGui:FindFirstChild("RecordingIndicatorGUI")
+            if indicatorGui then
+                indicatorGui:Destroy()
+            end
+
+            if #currentRecordingData > 1 then
+                local baseName = (currentRecordingTarget and currentRecordingTarget.Name ~= LocalPlayer.Name) and "Rekaman " .. currentRecordingTarget.Name or "Rekaman Diri"
+                local newName, i = baseName .. " 1", 1
+                while savedRecordings[newName] do i += 1; newName = baseName .. " " .. i end
+                
+                local recordingObject = {
+                    frames = currentRecordingData,
+                    targetUserId = currentRecordingTarget.UserId
+                }
+                savedRecordings[newName] = recordingObject
+                
+                saveRecordingsData()
+                recStatusLabel.Text = "Rekaman disimpan sebagai: " .. newName
+                updateRecordingsList()
+            else
+                recStatusLabel.Text = "Perekaman dibatalkan (terlalu singkat)."
+            end
+            currentRecordingData = {}
+            currentRecordingTarget = nil -- Reset target
+            
+            recordButton.Text = "🔴"
+            recordButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+        end
+        
+        playSingleRecording = function(recordingObject, onComplete)
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+            if not (hrp and humanoid) then if onComplete then onComplete() end; return end
+        
+            originalPlaybackWalkSpeed = humanoid.WalkSpeed
+            IsPlaybackActive = true
+            local animateScript = char and char:FindFirstChild("Animate")
+            if animateScript then
+                savedAnimateDisabled = animateScript.Disabled
+                pcall(function() animateScript.Disabled = false end)
+            end
+        
+            local recordingData = recordingObject.frames or recordingObject
+            if not recordingData or #recordingData < 1 then if onComplete then onComplete() end; return end
+        
+            local recordingDuration = recordingData[#recordingData].time
+            if recordingDuration <= 0 then if onComplete then onComplete() end; return end
+        
+            local animationCache = {}
+            playbackMovers = {}
+        
+            pcall(function()
+                local attachment = Instance.new("Attachment", hrp); attachment.Name = "ReplayAttachment"
+                local alignPos = Instance.new("AlignPosition", attachment); alignPos.Attachment0 = attachment; alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment; alignPos.Responsiveness = 200; alignPos.MaxForce = 100000
+                local alignOrient = Instance.new("AlignOrientation", attachment); alignOrient.Attachment0 = attachment; alignOrient.Mode = Enum.OrientationAlignmentMode.OneAttachment; alignOrient.Responsiveness = 200; alignOrient.MaxTorque = 100000
+                playbackMovers.attachment = attachment
+                playbackMovers.alignPos = alignPos
+                playbackMovers.alignOrient = alignOrient
+            end)
+        
+            if isAnimationBypassEnabled then
+                pcall(function()
+                    local guidePart = Instance.new("Part"); guidePart.Name = "PlaybackGuidePart"; guidePart.Size = Vector3.new(1,1,1); guidePart.Transparency = 1; guidePart.CanCollide = false; guidePart.Anchored = true; guidePart.Parent = workspace
+                    playbackMovers.guidePart = guidePart
+                end)
+            end
+        
+            local soundJumping, soundLanding, customRunningSound
+            pcall(function()
+                soundJumping = hrp:FindFirstChild("Jumping")
+                soundLanding = hrp:FindFirstChild("FreeFalling")
+                customRunningSound = Instance.new("Sound", hrp); customRunningSound.Name = "CustomRunningSound"; customRunningSound.Looped = true
+                local originalRunningSound = hrp:FindFirstChild("Running")
+                if originalRunningSound and originalRunningSound:IsA("Sound") then
+                    customRunningSound.SoundId = originalRunningSound.SoundId; customRunningSound.Volume = originalRunningSound.Volume; customRunningSound.Pitch = originalRunningSound.Pitch
+                else
+                    customRunningSound.SoundId = "rbxassetid://122226169"
+                end
+            end)
+            
+            local lastPlayerState = "Idle"
+            local loopStartTime = tick()
+            local lastFrameIndex = 1
+            local wasPaused = false
+            
+            playbackConnection = RunService.RenderStepped:Connect(function(dt)
+                if not isPlaying then
+                    if playbackConnection then playbackConnection:Disconnect(); playbackConnection = nil end
+                    return 
+                end
+        
+                if isPaused then
+                    if not wasPaused then
+                        -- Saat dijeda, perintahkan aligner untuk menahan posisi saat ini
+                        if hrp and playbackMovers.alignPos then
+                            playbackMovers.alignPos.Position = hrp.Position
+                        end
+                        if hrp and playbackMovers.alignOrient then
+                            playbackMovers.alignOrient.CFrame = hrp.CFrame
+                        end
+
+                        if customRunningSound and customRunningSound.IsPlaying then customRunningSound:Stop() end
+                        for _, track in pairs(animationCache) do if track.IsPlaying then track:Stop(0.1) end end
+                        wasPaused = true
+                    end
+                    -- Update loopStartTime agar waktu jeda tidak dihitung
+                    loopStartTime = loopStartTime + dt 
+                    return 
+                end
+
+                if wasPaused then
+                    -- Tidak perlu melakukan apa-apa saat resume, loop akan mengambil alih
+                    wasPaused = false
+                end
+        
+                local elapsedTime = tick() - loopStartTime
+                
+                if elapsedTime >= recordingDuration then
+                    if playbackConnection then playbackConnection:Disconnect(); playbackConnection = nil end
+                    cleanupSinglePlayback(onComplete ~= nil)
+                    if onComplete then onComplete() end
+                    return
+                end
+                
+                local frameToPlay, currentFrame
+                for i = lastFrameIndex, #recordingData do
+                    if recordingData[i].time >= elapsedTime then
+                        frameToPlay = recordingData[i]
+                        currentFrame = recordingData[i-1] or recordingData[1]
+                        lastFrameIndex = i
+                        break
+                    end
+                end
+                
+                if not frameToPlay then
+                    frameToPlay = recordingData[#recordingData]
+                    currentFrame = recordingData[#recordingData]
+                end
+        
+                local cframeToPlay = CFrame.new(unpack(frameToPlay.cframe))
+                local cframeCurrent = CFrame.new(unpack(currentFrame.cframe))
+                
+                local velocity = 0
+                local timeDelta = frameToPlay.time - currentFrame.time
+                if timeDelta > 0.001 then
+                    velocity = (cframeToPlay.Position - cframeCurrent.Position).Magnitude / timeDelta
+                end
+                
+                local interpolatedCFrame
+                if frameToPlay.isTeleport then
+                    interpolatedCFrame = cframeToPlay
+                    loopStartTime = tick() - frameToPlay.time
+                else
+                    local alpha = math.clamp((elapsedTime - currentFrame.time) / timeDelta, 0, 1)
+                    interpolatedCFrame = cframeCurrent:Lerp(cframeToPlay, alpha)
+                end
+
+
+                local currentState = currentFrame.state
+                
+                if not isAnimationBypassEnabled then
+                    if playbackMovers.alignPos then
+                        playbackMovers.alignPos.Position = interpolatedCFrame.Position
+                        -- Shiftlock Fix v3: Toggle the mover's Enabled property for better replication
+                        if playbackMovers.alignOrient then
+                            local isShiftLockActive = (UserInputService and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter)
+                            if isShiftLockActive then
+                                playbackMovers.alignOrient.Enabled = false
+                            else
+                                playbackMovers.alignOrient.Enabled = true
+                                playbackMovers.alignOrient.CFrame = interpolatedCFrame
+                            end
+                        end
+                    end
+                    humanoid.WalkSpeed = originalPlaybackWalkSpeed
+        
+                    local requiredAnims = {}
+                    for _, animData in ipairs(currentFrame.anims) do
+                        requiredAnims[animData.id] = animData.time
+                        if not animationCache[animData.id] then
+                            local anim = Instance.new("Animation"); anim.AnimationId = animData.id
+                            animationCache[animData.id] = humanoid:LoadAnimation(anim)
+                        end
+                        local track = animationCache[animData.id]
+                        if not track.IsPlaying then track:Play(0.1) end
+                        track:AdjustSpeed(velocity / (originalPlaybackWalkSpeed > 0 and originalPlaybackWalkSpeed or 16))
+                        track.TimePosition = animData.time
+                    end
+                    for id, track in pairs(animationCache) do
+                        if not requiredAnims[id] and track.IsPlaying then track:Stop(0.1) end
+                    end
+                else -- Animation Bypass is ENABLED
+                    -- Hapus animasi yang di-cache dari mode non-bypass
+                    if next(animationCache) then
+                        for id, track in pairs(animationCache) do
+                            if track.IsPlaying then track:Stop(0) end
+                        end
+                        animationCache = {} -- Kosongkan cache
+                    end
+
+                    -- Kalkulasi kecepatan dinamis dari data rekaman
+                    humanoid.WalkSpeed = velocity
+                    
+                    -- Tentukan state humanoid berdasarkan pergerakan vertikal
+                    local heightDelta = cframeToPlay.Position.Y - cframeCurrent.Position.Y
+                    if heightDelta > 0.5 then -- Threshold untuk lompat
+                        pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end)
+                    elseif heightDelta < -1.5 then -- Threshold untuk jatuh
+                        pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Freefall) end)
+                    else
+                        -- Jika tidak lompat atau jatuh, pastikan state-nya Running
+                        if humanoid:GetState() ~= Enum.HumanoidStateType.Running then
+                            pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Running) end)
+                        end
+                    end
+                    
+                    -- Gerakkan karakter menggunakan AlignPosition dan AlignOrientation untuk FE
+                    if playbackMovers.alignPos and playbackMovers.alignOrient then
+                        playbackMovers.alignPos.Position = interpolatedCFrame.Position
+                        -- Shiftlock Fix v3: Toggle the mover's Enabled property for better replication
+                        local isShiftLockActive = (UserInputService and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter)
+                        if isShiftLockActive then
+                            playbackMovers.alignOrient.Enabled = false
+                        else
+                            playbackMovers.alignOrient.Enabled = true
+                            playbackMovers.alignOrient.CFrame = interpolatedCFrame
+                        end
+                    end
+                    
+                    -- Animation Bypass Smoothening: Signal movement to the Animate script
+                    pcall(function() humanoid:MoveTo(interpolatedCFrame.Position) end)
+
+                    -- Sinkronisasi kecepatan animasi lari dengan kecepatan gerak
+                    if humanoid:FindFirstChild("Animator") then
+                        local animator = humanoid.Animator
+                        for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+                            if track.Name:lower():find("run") then
+                                track:AdjustSpeed(math.clamp(velocity / 16, 0.8, 2.0))
+                            end
+                        end
+                    end
+                end
+        
+                pcall(function()
+                    if currentState and currentState ~= lastPlayerState then
+                        local stateName = currentState:match("Enum.HumanoidStateType%.(.*)")
+                        if stateName and Enum.HumanoidStateType[stateName] then
+                            humanoid:ChangeState(Enum.HumanoidStateType[stateName])
+                        end
+                        if currentState == "Enum.HumanoidStateType.Jumping" and soundJumping then soundJumping:Play() end
+                        if lastPlayerState == "Enum.HumanoidStateType.Freefall" and currentState ~= "Enum.HumanoidStateType.Jumping" and soundLanding then soundLanding:Play() end
+                    end
+                    
+                    if customRunningSound then
+                        local isRunning = (currentState == "Enum.HumanoidStateType.Running" or currentState == "Enum.HumanoidStateType.RunningNoPhysics")
+                        if isRunning and velocity > 1 and not customRunningSound.IsPlaying then
+                            customRunningSound.PlaybackSpeed = velocity / (originalPlaybackWalkSpeed > 0 and originalPlaybackWalkSpeed or 16)
+                            customRunningSound:Play()
+                        elseif (not isRunning or velocity <= 1) and customRunningSound.IsPlaying then
+                            customRunningSound:Stop()
+                        end
+                    end
+                    lastPlayerState = currentState
+                end)
+            end)
+        end
         
         local replayOptionsFrame = Instance.new("Frame", controlsContainer) -- [[ PERBAIKAN: Parent diubah ]]
         replayOptionsFrame.Name = "ReplayOptionsFrame"
@@ -6355,13 +6179,7 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
 
         if input.KeyCode == Enum.KeyCode.F and not UserInputService.TouchEnabled then
             if not IsFlying then StartFly() else StopFly() end
-        end
-    end)
-
-    ConnectEvent(UserInputService.InputBegan, function(input, processed)
-        if processed or UserInputService:GetFocusedTextBox() then return end
-
-        if input.KeyCode == Enum.KeyCode.C then
+        elseif input.KeyCode == Enum.KeyCode.C then
             if isRecording then
                 stopRecording(true)
             else
@@ -7218,188 +7036,6 @@ end)
 
 
 -- =========================
--- ArexansTools Playback Fix (Merged Override)
--- Replaces old playback/pause/resume/playNextRecording implementations
--- to ensure smooth multi-recording playback and correct pause behaviour.
--- This block intentionally placed at end so it overrides previous definitions.
--- =========================
-
-local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
-local Players = game:GetService("Players")
-
-local _player = Players.LocalPlayer
-local IsPlaybackActive = false
-local savedAnimateDisabled = nil
-
-local function __restore_playback_state()
-    local char = LocalPlayer and LocalPlayer.Character
-    if char then
-        local animateScript = char:FindFirstChild("Animate")
-        if animateScript and savedAnimateDisabled ~= nil then
-            pcall(function() animateScript.Disabled = savedAnimateDisabled end)
-        end
-        savedAnimateDisabled = nil
-    end
-    IsPlaybackActive = false
-end
-
-
--- ensure globals used by original script are available; override if needed
-isPaused = isPaused or false
-isSmoothPaused = isSmoothPaused or false
-currentFrame = currentFrame or nil
-nextFrame = nextFrame or nil
-nextRecordingIndex = nextRecordingIndex or nil
-isAnimationBypassEnabled = isAnimationBypassEnabled or false
-
-local function smoothReset(rootPart)
-    if not rootPart then return end
-    local alignPos = rootPart:FindFirstChild("PlaybackAlignPos")
-    local alignOri = rootPart:FindFirstChild("PlaybackAlignOri")
-    if alignPos then
-        alignPos.Position = rootPart.Position
-        alignPos.Responsiveness = 150
-    end
-    if alignOri then
-        alignOri.CFrame = rootPart.CFrame
-        alignOri.Responsiveness = 150
-    end
-end
-
--- Override global functions used by UI/other parts
-function pausePlayback()
-    isPaused = true
-    isSmoothPaused = true
-    local char = _player and _player.Character
-    if char then
-        local humanoid = char:FindFirstChildOfClass("Humanoid")
-        local rootPart = char:FindFirstChild("HumanoidRootPart")
-        if humanoid then
-            -- stop movement but keep physics stable
-            pcall(function()
-                humanoid:Move(Vector3.new(0,0,0))
-                humanoid.WalkSpeed = 0
-                humanoid:ChangeState(Enum.HumanoidStateType.Idle)
-            end)
-        end
-        if rootPart then
-            -- gently snap aligners to current position to avoid stuck interpolation
-            pcall(function() smoothReset(rootPart) end)
-        end
-    end
-end
-
-function resumePlayback()
-    if not isPaused then
-        return
-    end
-    -- small delay to allow physics to stabilise
-    task.wait(0.05)
-    isSmoothPaused = false
-    isPaused = false
-end
-
-function playNextRecording()
-    if not nextRecordingIndex then return end
-    -- Reset frame pointers to avoid lingering references from previous recording
-    currentFrame = nil
-    nextFrame = nil
-    isPaused = false
-    isSmoothPaused = false
-
-    local char = _player and _player.Character
-    local rootPart = char and char:FindFirstChild("HumanoidRootPart")
-    if rootPart then pcall(function() smoothReset(rootPart) end) end
-    task.wait(0.18)
-    -- call existing playRecording function (should be defined earlier in the file)
-    if type(playRecording) == "function" then
-        pcall(function() playRecording(nextRecordingIndex) end)
-    else
-        warn("[ArexansTools] playRecording() not found when calling playNextRecording()")
-    end
-end
-
--- Main smooth playback loop that will override previous loops
-do
-    -- disconnect previous connection if it exists (best-effort: tries to find stored connection variable)
-    if playbackConnection and type(playbackConnection.Disconnect) == "function" then
-        pcall(function() playbackConnection:Disconnect() end)
-    end
-
-    playbackConnection = RunService.RenderStepped:Connect(function(dt)
-        if isPaused or isSmoothPaused then return end
-        if IsPlaybackActive then return end
-        if not _player then return end
-        local char = _player.Character
-        if not char then return end
-        local humanoid = char:FindFirstChildOfClass("Humanoid")
-        local rootPart = char:FindFirstChild("HumanoidRootPart")
-        if humanoid and rootPart and currentFrame and nextFrame then
-            local ok, cf1 = pcall(function() return CFrame.new(unpack(currentFrame.cframe)) end)
-            local ok2, cf2 = pcall(function() return CFrame.new(unpack(nextFrame.cframe)) end)
-            if not ok or not ok2 or not cf1 or not cf2 then return end
-
-            local pos1, pos2 = cf1.Position, cf2.Position
-            local dist = (pos2 - pos1).Magnitude
-            local timeDelta = math.max((nextFrame.time or 0) - (currentFrame.time or 0), 0.016)
-            local dynamicSpeed = math.clamp((dist / timeDelta) * 1.15, 6, 22)
-
-            -- apply movement speed
-            pcall(function() humanoid.WalkSpeed = dynamicSpeed end)
-
-            -- handle jump/freefall states based on vertical delta
-            local heightDelta = pos2.Y - pos1.Y
-            if heightDelta > 2 then
-                pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end)
-            elseif heightDelta < -2 then
-                pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Freefall) end)
-            else
-                -- Do not force Running here; let Animate select Walk vs Run based on WalkSpeed
-                if isAnimationBypassEnabled then
-                    pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Running) end)
-                end
-            end
-
-
-
-            -- smooth interpolation
-            local alpha = math.clamp(dt / timeDelta, 0, 1)
-            local targetCF = cf1:Lerp(cf2, alpha)
-            rootPart.CFrame = rootPart.CFrame:Lerp(targetCF, 0.35)
-
-            -- manual sync when bypass enabled
-            if isAnimationBypassEnabled then
-                pcall(function() humanoid:MoveTo(targetCF.Position) end)
-            end
-
-            -- if nextFrame marks last frame, auto-play next recording
-            if nextFrame.isLast and nextRecordingIndex then
-                -- small debounce to avoid recursive call within same frame
-                local idx = nextRecordingIndex
-                task.defer(function()
-                    if nextRecordingIndex == idx then
-                        pcall(playNextRecording)
-                    end
-                end)
-            end
-        end
-    end)
-end
-
-print("[ArexansTools] Merged playback fix appended - overrides loaded.")
-
-
--- Ensure cleanup restores Animate state and clears playback flag
-do
-    local _orig_cleanup = cleanupSinglePlayback
-    if type(_orig_cleanup) == "function" then
-        cleanupSinglePlayback = function(isSequence)
-            _orig_cleanup(isSequence)
-            pcall(__restore_playback_state)
-        end
-    end
-end
 
 
 -- ======= APPENDED: emote.lua START =======
