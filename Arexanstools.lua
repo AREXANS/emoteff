@@ -5765,9 +5765,11 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
                 
                 saveRecordingsData()
                 recStatusLabel.Text = "Rekaman disimpan sebagai: " .. newName
+                showNotification("Rekaman disimpan: " .. newName, Color3.fromRGB(50, 200, 50))
                 updateRecordingsList()
             else
                 recStatusLabel.Text = "Perekaman dibatalkan (terlalu singkat)."
+                showNotification("Perekaman dibatalkan (terlalu singkat).", Color3.fromRGB(200, 150, 50))
             end
             currentRecordingData = {}
             currentRecordingTarget = nil -- Reset target
@@ -5959,8 +5961,8 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
                         animationCache = {} -- Kosongkan cache
                     end
 
-                    -- Force the Animate script to select the run animation, then adjust its speed.
-                    humanoid.WalkSpeed = 32 -- High value to trigger the run animation
+                    -- Set WalkSpeed dynamically to let the default Animate script handle walk/run transitions
+                    humanoid.WalkSpeed = velocity
 
                     -- Gerakkan karakter menggunakan AlignPosition dan AlignOrientation untuk FE
                     if playbackMovers.alignPos and playbackMovers.alignOrient then
@@ -5976,22 +5978,6 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
                     
                     -- Animation Bypass Smoothening: Signal movement to the Animate script
                     pcall(function() humanoid:MoveTo(interpolatedCFrame.Position) end)
-
-                    -- Synchronize run animation speed with movement velocity
-                    if humanoid:FindFirstChild("Animator") then
-                        local animator = humanoid.Animator
-                        for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-                            local trackName = track.Name:lower()
-                            if velocity > 0.1 then
-                                if trackName:find("idle") or trackName:find("walk") then
-                                    track:Stop(0)
-                                end
-                            end
-                            if trackName:find("run") then
-                                track:AdjustSpeed(math.clamp(velocity / 25, 0.8, 1.2))
-                            end
-                        end
-                    end
                 end
         
                 pcall(function()
