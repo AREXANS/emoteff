@@ -5963,9 +5963,8 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
                     -- Gerakkan karakter menggunakan AlignPosition dan AlignOrientation untuk FE
                     if playbackMovers.alignPos and playbackMovers.alignOrient then
                         playbackMovers.alignPos.Position = interpolatedCFrame.Position
-                        -- Shiftlock Fix v3: Toggle the mover's Enabled property for better replication
-                        local isShiftLockActive = (UserInputService and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter)
-                        if isShiftLockActive then
+                        -- Shiftlock Fix v4: Explicitly check for the script's own shift lock feature
+                        if IsShiftLockEnabled then
                             playbackMovers.alignOrient.Enabled = false
                         else
                             playbackMovers.alignOrient.Enabled = true
@@ -6213,7 +6212,7 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
             if not IsFlying then StartFly() else StopFly() end
         elseif input.KeyCode == Enum.KeyCode.C then
             if isRecording then
-                stopRecording(true)
+                stopActions()
             else
                 if IsViewingPlayer and currentlyViewedPlayer then
                     startRecording(currentlyViewedPlayer, true)
