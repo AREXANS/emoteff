@@ -5395,10 +5395,38 @@ task.spawn(function()
             end
         end
 
-        -- Fungsi lama, sekarang hanya memanggil fungsi baru untuk kompatibilitas
         stopActions = function()
-            stopRecording()
-            stopPlayback()
+            -- Force stop recording
+            isRecording = false
+            if recordingConnection then
+                recordingConnection:Disconnect()
+                recordingConnection = nil
+            end
+            local indicatorGui = CoreGui:FindFirstChild("RecordingIndicatorGUI")
+            if indicatorGui then
+                indicatorGui:Destroy()
+            end
+            if recordButton then
+                recordButton.Text = "🔴"
+                recordButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+            end
+            
+            -- Force stop playback
+            isPlaying = false
+            isPaused = false
+            if playbackConnection then
+                playbackConnection:Disconnect()
+                playbackConnection = nil
+            end
+            cleanupSinglePlayback(false)
+            if playButton then
+                playButton.Text = "▶️"
+                playButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+            end
+
+            if recStatusLabel then
+                recStatusLabel.Text = "Semua aksi dihentikan."
+            end
         end
 
 
@@ -5929,9 +5957,8 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
                         animationCache = {} -- Kosongkan cache
                     end
 
-                    -- [[ PERBAIKAN BYPASS ANIMATION ]]
-                    -- Paksa Animate script memilih animasi lari, lalu sesuaikan kecepatannya.
-                    humanoid.WalkSpeed = 32 -- Nilai tinggi untuk memicu animasi lari
+                    -- Revert to original logic: let the Animate script decide between walk/run
+                    humanoid.WalkSpeed = velocity 
                     
                     -- Gerakkan karakter menggunakan AlignPosition dan AlignOrientation untuk FE
                     if playbackMovers.alignPos and playbackMovers.alignOrient then
@@ -5949,11 +5976,12 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
                     -- Animation Bypass Smoothening: Signal movement to the Animate script
                     pcall(function() humanoid:MoveTo(interpolatedCFrame.Position) end)
 
-                    -- Sinkronisasi kecepatan animasi lari dengan kecepatan gerak
+                    -- Adjust speed of whatever animation (walk or run) is playing
                     if humanoid:FindFirstChild("Animator") then
                         local animator = humanoid.Animator
                         for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-                            if track.Name:lower():find("run") then
+                            local trackName = track.Name:lower()
+                            if trackName:find("run") or trackName:find("walk") then
                                 track:AdjustSpeed(math.clamp(velocity / 16, 0.8, 2.0))
                             end
                         end
@@ -6074,9 +6102,7 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
         end)
 
         stopButton.MouseButton1Click:Connect(function()
-            -- Force stop both actions regardless of their current state
-            stopPlayback()
-            stopRecording(true)
+            stopActions()
         end)
 
         deleteSelectedButton.MouseButton1Click:Connect(function()
