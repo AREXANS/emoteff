@@ -5957,9 +5957,9 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
                         animationCache = {} -- Kosongkan cache
                     end
 
-                    -- Revert to original logic: let the Animate script decide between walk/run
-                    humanoid.WalkSpeed = velocity 
-                    
+                    -- Force the Animate script to select the run animation, then adjust its speed.
+                    humanoid.WalkSpeed = 32 -- High value to trigger the run animation
+
                     -- Gerakkan karakter menggunakan AlignPosition dan AlignOrientation untuk FE
                     if playbackMovers.alignPos and playbackMovers.alignOrient then
                         playbackMovers.alignPos.Position = interpolatedCFrame.Position
@@ -5975,12 +5975,17 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
                     -- Animation Bypass Smoothening: Signal movement to the Animate script
                     pcall(function() humanoid:MoveTo(interpolatedCFrame.Position) end)
 
-                    -- Adjust speed of whatever animation (walk or run) is playing
+                    -- Synchronize run animation speed with movement velocity
                     if humanoid:FindFirstChild("Animator") then
                         local animator = humanoid.Animator
                         for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
                             local trackName = track.Name:lower()
-                            if trackName:find("run") or trackName:find("walk") then
+                            if velocity > 0.1 then
+                                if trackName:find("idle") or trackName:find("walk") then
+                                    track:Stop(0)
+                                end
+                            end
+                            if trackName:find("run") then
                                 track:AdjustSpeed(math.clamp(velocity / 16, 0.8, 2.0))
                             end
                         end
