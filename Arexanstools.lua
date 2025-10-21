@@ -5800,8 +5800,9 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
             playbackMovers = {}
         
             pcall(function()
+                local responsivenessValue = isAnimationBypassEnabled and 35 or 200
                 local attachment = Instance.new("Attachment", hrp); attachment.Name = "ReplayAttachment"
-                local alignPos = Instance.new("AlignPosition", attachment); alignPos.Attachment0 = attachment; alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment; alignPos.Responsiveness = 200; alignPos.MaxForce = 100000
+                local alignPos = Instance.new("AlignPosition", attachment); alignPos.Attachment0 = attachment; alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment; alignPos.Responsiveness = responsivenessValue; alignPos.MaxForce = 100000
                 local alignOrient = Instance.new("AlignOrientation", attachment); alignOrient.Attachment0 = attachment; alignOrient.Mode = Enum.OrientationAlignmentMode.OneAttachment; alignOrient.Responsiveness = 200; alignOrient.MaxTorque = 100000
                 playbackMovers.attachment = attachment
                 playbackMovers.alignPos = alignPos
@@ -5856,8 +5857,9 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
                     
                     -- Buat ulang mover karena telah dihancurkan saat jeda
                     pcall(function()
+                        local responsivenessValue = isAnimationBypassEnabled and 35 or 200
                         local attachment = Instance.new("Attachment", hrp); attachment.Name = "ReplayAttachment"
-                        local alignPos = Instance.new("AlignPosition", attachment); alignPos.Attachment0 = attachment; alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment; alignPos.Responsiveness = 200; alignPos.MaxForce = 100000
+                        local alignPos = Instance.new("AlignPosition", attachment); alignPos.Attachment0 = attachment; alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment; alignPos.Responsiveness = responsivenessValue; alignPos.MaxForce = 100000
                         local alignOrient = Instance.new("AlignOrientation", attachment); alignOrient.Attachment0 = attachment; alignOrient.Mode = Enum.OrientationAlignmentMode.OneAttachment; alignOrient.Responsiveness = 200; alignOrient.MaxTorque = 100000
                         playbackMovers.attachment = attachment
                         playbackMovers.alignPos = alignPos
