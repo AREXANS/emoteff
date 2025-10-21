@@ -6211,7 +6211,7 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
         if input.KeyCode == Enum.KeyCode.F and not UserInputService.TouchEnabled then
             if not IsFlying then StartFly() else StopFly() end
         elseif input.KeyCode == Enum.KeyCode.C then
-            if isRecording then
+            if isRecording or isPlaying then
                 stopActions()
             else
                 if IsViewingPlayer and currentlyViewedPlayer then
