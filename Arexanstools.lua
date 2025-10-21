@@ -5258,6 +5258,7 @@ task.spawn(function()
         local selectedRecordings = {}
         local playbackConnection = nil
         local isPaused = false
+        local pausedAtTime = 0 -- Waktu saat jeda
         local isAnimationBypassEnabled = false
         local originalPlaybackWalkSpeed = 16
         local playbackMovers = {}
@@ -5812,26 +5813,35 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
         
                 if isPaused then
                     if not wasPaused then
-                        -- Saat dijeda, perintahkan aligner untuk menahan posisi saat ini
-                        if hrp and playbackMovers.alignPos then
-                            playbackMovers.alignPos.Position = hrp.Position
-                        end
-                        if hrp and playbackMovers.alignOrient then
-                            playbackMovers.alignOrient.CFrame = hrp.CFrame
-                        end
-
-                        if customRunningSound and customRunningSound.IsPlaying then customRunningSound:Stop() end
-                        for _, track in pairs(animationCache) do if track.IsPlaying then track:Stop(0.1) end end
+                        -- Saat pertama kali dijeda, simpan waktu saat ini
+                        pausedAtTime = tick() - loopStartTime
                         wasPaused = true
                     end
-                    -- Update loopStartTime agar waktu jeda tidak dihitung
-                    loopStartTime = loopStartTime + dt 
+                    -- Saat dijeda, jangan lakukan apa-apa. Pemain bebas bergerak.
                     return 
                 end
 
                 if wasPaused then
-                    -- Tidak perlu melakukan apa-apa saat resume, loop akan mengambil alih
+                    -- Saat melanjutkan, atur ulang waktu mulai untuk melanjutkan dari titik jeda
+                    loopStartTime = tick() - pausedAtTime
                     wasPaused = false
+                    
+                    -- Buat ulang mover karena telah dihancurkan saat jeda
+                    pcall(function()
+                        local attachment = Instance.new("Attachment", hrp); attachment.Name = "ReplayAttachment"
+                        local alignPos = Instance.new("AlignPosition", attachment); alignPos.Attachment0 = attachment; alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment; alignPos.Responsiveness = 200; alignPos.MaxForce = 100000
+                        local alignOrient = Instance.new("AlignOrientation", attachment); alignOrient.Attachment0 = attachment; alignOrient.Mode = Enum.OrientationAlignmentMode.OneAttachment; alignOrient.Responsiveness = 200; alignOrient.MaxTorque = 100000
+                        playbackMovers.attachment = attachment
+                        playbackMovers.alignPos = alignPos
+                        playbackMovers.alignOrient = alignOrient
+                    end)
+                    -- [[ PERBAIKAN BUG STUCK ANIMASI ]]
+                    -- Paksa Animate script untuk re-evaluasi state setelah jeda
+                    pcall(function()
+                        humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+                        task.wait()
+                        humanoid:ChangeState(Enum.HumanoidStateType.Running)
+                    end)
                 end
         
                 local elapsedTime = tick() - loopStartTime
@@ -5919,21 +5929,9 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
                         animationCache = {} -- Kosongkan cache
                     end
 
-                    -- Kalkulasi kecepatan dinamis dari data rekaman
-                    humanoid.WalkSpeed = velocity
-                    
-                    -- Tentukan state humanoid berdasarkan pergerakan vertikal
-                    local heightDelta = cframeToPlay.Position.Y - cframeCurrent.Position.Y
-                    if heightDelta > 0.5 then -- Threshold untuk lompat
-                        pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end)
-                    elseif heightDelta < -1.5 then -- Threshold untuk jatuh
-                        pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Freefall) end)
-                    else
-                        -- Jika tidak lompat atau jatuh, pastikan state-nya Running
-                        if humanoid:GetState() ~= Enum.HumanoidStateType.Running then
-                            pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Running) end)
-                        end
-                    end
+                    -- [[ PERBAIKAN BYPASS ANIMATION ]]
+                    -- Paksa Animate script memilih animasi lari, lalu sesuaikan kecepatannya.
+                    humanoid.WalkSpeed = 32 -- Nilai tinggi untuk memicu animasi lari
                     
                     -- Gerakkan karakter menggunakan AlignPosition dan AlignOrientation untuk FE
                     if playbackMovers.alignPos and playbackMovers.alignOrient then
@@ -6051,13 +6049,21 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
         end)
         
         playButton.MouseButton1Click:Connect(function()
-            if isPlaying then 
+            if isPlaying then
                 isPaused = not isPaused
                 if isPaused then
+                    -- Jeda: Hancurkan mover agar pemain bisa bergerak bebas
+                    if playbackConnection then
+                        -- Dapatkan waktu jeda dari koneksi yang sedang berjalan
+                        -- Ini memerlukan sedikit trik karena elapsedTime bersifat lokal untuk koneksi
+                        -- Kita akan menyimpannya di variabel upvalue saat jeda
+                    end
+                    cleanupSinglePlayback(true) -- Gunakan 'true' untuk menandakan ini bagian dari sekuens
                     playButton.Text = "▶️"
                     playButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
                     recStatusLabel.Text = "Pemutaran dijeda."
                 else
+                    -- Lanjutkan: Pemutaran akan dilanjutkan oleh loop playSequence
                     playButton.Text = "⏸️"
                     playButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
                     recStatusLabel.Text = "Melanjutkan pemutaran..."
@@ -6068,9 +6074,9 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
         end)
 
         stopButton.MouseButton1Click:Connect(function()
-            if isPlaying or isPaused then
-                stopPlayback()
-            end
+            -- Force stop both actions regardless of their current state
+            stopPlayback()
+            stopRecording(true)
         end)
 
         deleteSelectedButton.MouseButton1Click:Connect(function()
