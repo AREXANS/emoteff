@@ -6327,17 +6327,21 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
             end
         end
 
-        -- [BARU] Deteksi animasi bawaan game
+        -- [BARU] Deteksi animasi bawaan game (HANYA UNTUK R6)
         isGameAnimationOverrideActive = false -- Reset status saat respawn
         task.wait(0.5) -- Beri waktu agar script Animate memuat animasi
-        local animateScript = character:FindFirstChild("Animate")
-        if animateScript then
-            local walkAnim = animateScript:FindFirstChild("walk", true) and animateScript:FindFirstChild("walk", true):FindFirstChild("WalkAnim")
-            if walkAnim and walkAnim:IsA("Animation") then
-                local currentWalkAnimId = walkAnim.AnimationId:match("%d+")
-                if currentWalkAnimId and currentWalkAnimId ~= "10921269718" then
-                    isGameAnimationOverrideActive = true
-                    showNotification("Animasi game terdeteksi! Fitur animasi kustom dinonaktifkan.", Color3.fromRGB(255, 150, 0))
+        
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if humanoid and humanoid.RigType == Enum.HumanoidRigType.R6 then
+            local animateScript = character:FindFirstChild("Animate")
+            if animateScript then
+                local walkAnim = animateScript:FindFirstChild("walk", true) and animateScript:FindFirstChild("walk", true):FindFirstChild("WalkAnim")
+                if walkAnim and walkAnim:IsA("Animation") then
+                    local currentWalkAnimId = walkAnim.AnimationId:match("%d+")
+                    if currentWalkAnimId and currentWalkAnimId ~= "10921269718" then
+                        isGameAnimationOverrideActive = true
+                        showNotification("Animasi game terdeteksi! Fitur animasi kustom dinonaktifkan.", Color3.fromRGB(255, 150, 0))
+                    end
                 end
             end
         end
