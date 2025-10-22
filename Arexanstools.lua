@@ -3097,19 +3097,20 @@ task.spawn(function()
         bodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
         bodyVelocity.Velocity = Vector3.new(0, 0, 0)
         
-        -- Main fly animation
+        local controls = {F = 0, B = 0, L = 0, R = 0, Q = 0, E = 0}
+        local currentAnim = "idle" -- Lacak status animasi saat ini
+        
+        -- Animasi idle awal
         PlayAnim(10714347256, 4, 0)
 
-        local controls = {F = 0, B = 0, L = 0, R = 0, Q = 0, E = 0}
-        
         table.insert(FlyConnections, UserInputService.InputBegan:Connect(function(input, processed)
             if processed or not IsFlying then return end
             if input.UserInputType == Enum.UserInputType.Keyboard then
                 local key = input.KeyCode.Name:lower()
-                if key == "w" then controls.F = 1; PlayAnim(10714177846, 4.65, 0)
-                elseif key == "s" then controls.B = -1; PlayAnim(10147823318, 4.11, 0)
-                elseif key == "a" then controls.L = -1; PlayAnim(10147823318, 3.55, 0)
-                elseif key == "d" then controls.R = 1; PlayAnim(10147823318, 4.81, 0)
+                if key == "w" then controls.F = 1
+                elseif key == "s" then controls.B = -1
+                elseif key == "a" then controls.L = -1
+                elseif key == "d" then controls.R = 1
                 elseif key == "e" then controls.Q = 1
                 elseif key == "q" then controls.E = -1 end
             end
@@ -3125,17 +3126,40 @@ task.spawn(function()
                 elseif key == "d" then controls.R = 0
                 elseif key == "e" then controls.Q = 0
                 elseif key == "q" then controls.E = 0 end
-                
-                -- If no movement keys are pressed, return to idle fly animation
-                if controls.F == 0 and controls.B == 0 and controls.L == 0 and controls.R == 0 then
-                    PlayAnim(10714347256, 4, 0)
-                end
             end
         end))
         
         table.insert(FlyConnections, RunService.RenderStepped:Connect(function()
             if not IsFlying then return end
             
+            -- Logika Animasi
+            local newAnim = "idle"
+            if controls.F > 0 then
+                newAnim = "forward"
+            elseif controls.B < 0 then
+                newAnim = "backward"
+            elseif controls.L < 0 then
+                newAnim = "left"
+            elseif controls.R > 0 then
+                newAnim = "right"
+            end
+
+            if newAnim ~= currentAnim then
+                if newAnim == "idle" then
+                    PlayAnim(10714347256, 4, 0) -- Idle
+                elseif newAnim == "forward" then
+                    PlayAnim(10714177846, 4.65, 0) -- Maju
+                elseif newAnim == "backward" then
+                    PlayAnim(10147823318, 4.11, 0) -- Mundur
+                elseif newAnim == "left" then
+                    PlayAnim(10147823318, 3.55, 0) -- Kiri
+                elseif newAnim == "right" then
+                    PlayAnim(10147823318, 4.81, 0) -- Kanan
+                end
+                currentAnim = newAnim
+            end
+
+            -- Logika Gerakan
             local speed = (controls.L + controls.R ~= 0 or controls.F + controls.B ~= 0 or controls.Q + controls.E ~= 0) and (Settings.FlySpeed * 50) or 0
             local camera = Workspace.CurrentCamera
             
@@ -3143,7 +3167,7 @@ task.spawn(function()
                 local moveVector = Vector3.new(controls.L + controls.R, controls.Q + controls.E, controls.F + controls.B)
                 bodyVelocity.Velocity = (camera.CFrame:VectorToWorldSpace(moveVector.Unit)) * speed
             else
-                bodyVelocity.Velocity = Vector3.new(0, 0.1, 0) -- Slight upward force to counteract gravity
+                bodyVelocity.Velocity = Vector3.new(0, 0.1, 0) -- Sedikit gaya ke atas untuk melawan gravitasi
             end
             
             bodyGyro.CFrame = camera.CFrame
@@ -3202,56 +3226,86 @@ task.spawn(function()
         if IsFlying then return end
         local character = LocalPlayer.Character
         if not (character and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChildOfClass("Humanoid")) then return end
-        
+
         local root = character:WaitForChild("HumanoidRootPart")
         local humanoid = character:FindFirstChildOfClass("Humanoid")
-        
+
         local success, controlModule = pcall(require, LocalPlayer.PlayerScripts:WaitForChild("PlayerModule"):WaitForChild("ControlModule"))
         if not success then
             showNotification("Gagal memuat modul kontrol mobile.", Color3.fromRGB(255, 100, 100))
             return
         end
-        
+
         IsFlying = true
         saveFeatureStates()
         humanoid.PlatformStand = true
-        
+
         local bodyVelocity = Instance.new("BodyVelocity", root)
         bodyVelocity.Name = "FlyVelocity"
         bodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
         bodyVelocity.Velocity = Vector3.new(0, 0, 0)
-        
+
         local bodyGyro = Instance.new("BodyGyro", root)
         bodyGyro.Name = "FlyGyro"
         bodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
         bodyGyro.P = 1000
         bodyGyro.D = 50
-        
-        PlayAnim(10714347256, 4, 0) -- Idle fly animation
+
+        local currentAnim = "idle"
+        PlayAnim(10714347256, 4, 0) -- Animasi idle awal
 
         table.insert(FlyConnections, RunService.RenderStepped:Connect(function()
             if not IsFlying then return end
-            
+
             local camera = Workspace.CurrentCamera
             if not (character and root and root:FindFirstChild("FlyVelocity") and root:FindFirstChild("FlyGyro")) then
                 StopMobileFly()
                 return
             end
-            
+
             root.FlyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
             root.FlyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
             root.FlyGyro.CFrame = camera.CFrame
-            
+
             local direction = controlModule:GetMoveVector()
             local speed = Settings.FlySpeed * 50
-            
-            if direction.Magnitude > 0.1 then -- If player is moving
+
+            -- Logika Animasi Mobile
+            local newAnim = "idle"
+            if direction.Magnitude > 0.1 then
+                if direction.Z < -0.5 then
+                    newAnim = "forward"
+                elseif direction.Z > 0.5 then
+                    newAnim = "backward"
+                elseif direction.X < -0.5 then
+                    newAnim = "left"
+                elseif direction.X > 0.5 then
+                    newAnim = "right"
+                else
+                    newAnim = "forward" -- Default ke depan jika bergerak diagonal
+                end
+            end
+
+            if newAnim ~= currentAnim then
+                if newAnim == "idle" then
+                    PlayAnim(10714347256, 4, 0) -- Idle
+                elseif newAnim == "forward" then
+                    PlayAnim(10714177846, 4.65, 0) -- Maju
+                elseif newAnim == "backward" then
+                    PlayAnim(10147823318, 4.11, 0) -- Mundur
+                elseif newAnim == "left" then
+                    PlayAnim(10147823318, 3.55, 0) -- Kiri
+                elseif newAnim == "right" then
+                    PlayAnim(10147823318, 4.81, 0) -- Kanan
+                end
+                currentAnim = newAnim
+            end
+
+            -- Logika Gerakan Mobile
+            if direction.Magnitude > 0.1 then
                 root.FlyVelocity.Velocity = (camera.CFrame.RightVector * direction.X + camera.CFrame.LookVector * -direction.Z) * speed
-                -- Play forward animation for any movement on mobile for simplicity
-                PlayAnim(10714177846, 4.65, 0) 
-            else -- Player is idle
-                root.FlyVelocity.Velocity = Vector3.new(0, 0.1, 0) -- Counteract gravity
-                PlayAnim(10714347256, 4, 0) -- Idle animation
+            else
+                root.FlyVelocity.Velocity = Vector3.new(0, 0.1, 0) -- Melawan gravitasi
             end
         end))
     end
