@@ -557,7 +557,7 @@ task.spawn(function()
     local PlayerTabContent, PlayerListContainer, GeneralTabContent, TeleportTabContent, VipTabContent, SettingsTabContent, RekamanTabContent
     local PlayerListLayout, GeneralListLayout, TeleportListLayout, VipListLayout, SettingsListLayout, RekamanListLayout
     local setupPlayerTab, setupGeneralTab, setupTeleportTab, setupVipTab, setupSettingsTab, setupRekamanTab
-    local startRecording, stopRecording, stopActions
+    local startRecording, stopRecording, stopActions, stopPlayback
 
     local function InitializeMainGUI(expirationTimestamp, userRole)
         currentUserRole = userRole
@@ -5976,8 +5976,6 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
                         end
                     end
                     
-                    -- Animation Bypass Smoothening: Signal movement to the Animate script
-                    pcall(function() humanoid:MoveTo(interpolatedCFrame.Position) end)
                 end
         
                 pcall(function()
@@ -6204,12 +6202,19 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
         if input.KeyCode == Enum.KeyCode.F and not UserInputService.TouchEnabled then
             if not IsFlying then StartFly() else StopFly() end
         elseif input.KeyCode == Enum.KeyCode.C then
-            if isPlaying then
-                stopActions() -- Stop everything if playback is running
-            elseif isRecording then
-                stopRecording(false) -- Stop and save the recording
+            -- Periksa apakah sedang merekam, utamakan untuk berhenti & simpan
+            if isRecording then
+                stopRecording(true) -- Selalu simpan rekaman
+                
+                -- Jika pemutaran juga berjalan, hentikan setelah rekaman disimpan
+                if isPlaying then
+                    stopPlayback()
+                end
+            -- Jika hanya pemutaran yang berjalan (tidak ada rekaman)
+            elseif isPlaying then
+                stopPlayback()
+            -- Jika tidak ada yang aktif, mulai rekaman baru
             else
-                -- Start a new recording
                 if IsViewingPlayer and currentlyViewedPlayer then
                     startRecording(currentlyViewedPlayer, true)
                 else
