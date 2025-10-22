@@ -744,7 +744,8 @@ task.spawn(function()
         isEmoteEnabled = false
         EmoteScreenGui = nil
         isAnimationEnabled = false 
-        AnimationScreenGui = nil 
+        AnimationScreenGui = nil
+        local isGameAnimationOverrideActive = false -- [BARU] Lacak jika game menimpa animasi
     
         -- Variabel Global untuk menyimpan animasi
         lastAnimations = {}
@@ -1979,6 +1980,10 @@ task.spawn(function()
     end
 
     local function initializeAnimationGUI()
+        if isGameAnimationOverrideActive then
+            showNotification("Fitur animasi dinonaktifkan oleh game ini.", Color3.fromRGB(255, 150, 0))
+            return
+        end
         if not hasPermission("VIP") then
             showNotification("Silahkan upgrade ke VIP terlebih dahulu, Terimakasih", Color3.fromRGB(255,100,0))
             return
@@ -2163,6 +2168,7 @@ task.spawn(function()
                 
                 -- [[ FUNGSI PENERAPAN ANIMASI (DIPERBAIKI) ]]
                 local function setAnimation(animationType, animationId)
+                    if isGameAnimationOverrideActive then return end
                     local function saveLastAnimations() 
                         if writefile then 
                             pcall(function() 
@@ -6224,6 +6230,7 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
 
     
     local function applyAllAnimations(character)
+        if isGameAnimationOverrideActive then return end
         if not character or not next(lastAnimations) then return end
 
         local animateScript = character:WaitForChild("Animate", 10)
@@ -6317,6 +6324,21 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
                 StartMobileFly()
             else
                 StartFly()
+            end
+        end
+
+        -- [BARU] Deteksi animasi bawaan game
+        isGameAnimationOverrideActive = false -- Reset status saat respawn
+        task.wait(0.5) -- Beri waktu agar script Animate memuat animasi
+        local animateScript = character:FindFirstChild("Animate")
+        if animateScript then
+            local walkAnim = animateScript:FindFirstChild("walk", true) and animateScript:FindFirstChild("walk", true):FindFirstChild("WalkAnim")
+            if walkAnim and walkAnim:IsA("Animation") then
+                local currentWalkAnimId = walkAnim.AnimationId:match("%d+")
+                if currentWalkAnimId and currentWalkAnimId ~= "10921269718" then
+                    isGameAnimationOverrideActive = true
+                    showNotification("Animasi game terdeteksi! Fitur animasi kustom dinonaktifkan.", Color3.fromRGB(255, 150, 0))
+                end
             end
         end
 
