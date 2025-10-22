@@ -5648,8 +5648,6 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
                 warn("Export Error:", writeError)
             end
         end)
-        local stopRecording, stopPlayback -- Deklarasi awal
-
         startRecording = function(targetPlayer, showNotificationFlag)
             if isRecording then return end
             
