@@ -3023,25 +3023,237 @@ task.spawn(function()
         updatePlayerList() 
     end
 
+    local function PlayAnim(id, time, speed)
+        pcall(function()
+            local char = LocalPlayer.Character
+            if not (char and char:FindFirstChild("Animate") and char:FindFirstChildOfClass("Humanoid")) then return end
+            
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
+            
+            -- Stop previous custom animations to prevent overlap
+            for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
+                if track.Name == "CustomFlyAnim" then
+                    track:Stop(0.1)
+                end
+            end
+
+            -- Ensure default animations are off
+            char.Animate.Disabled = true
+
+            local anim = Instance.new("Animation")
+            anim.Name = "CustomFlyAnim" -- Give it a name to identify it later
+            anim.AnimationId = "rbxassetid://" .. tostring(id)
+            
+            local loadanim = humanoid:LoadAnimation(anim)
+            loadanim:Play(0.1)
+            loadanim.Looped = true -- Fly animations should loop
+            
+            -- The time and speed parameters seem to be for setting a specific pose
+            if time then loadanim.TimePosition = time end
+            if speed ~= nil then loadanim:AdjustSpeed(speed) end
+        end)
+    end
+
+    local function StopAnim()
+        local char = LocalPlayer.Character
+        if not (char and char:FindFirstChild("Animate") and char:FindFirstChildOfClass("Humanoid")) then return end
+
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        
+        -- Stop all custom flying animations
+        for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
+            -- A bit more robust check
+            if track.Name == "CustomFlyAnim" or (track.Animation and track.Animation.Name == "CustomFlyAnim") then
+                track:Stop(0.2)
+            end
+        end
+        
+        -- Re-enable default character animations
+        pcall(function()
+            char.Animate.Disabled = false
+        end)
+    end
+
     local function StartFly()
-        if IsFlying then return end; local character = LocalPlayer.Character; if not (character and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChildOfClass("Humanoid")) then return end; local root = character:WaitForChild("HumanoidRootPart"); local humanoid = character:FindFirstChildOfClass("Humanoid"); IsFlying = true; saveFeatureStates(); humanoid.PlatformStand = true; local bodyGyro = Instance.new("BodyGyro", root); bodyGyro.Name = "FlyGyro"; bodyGyro.P = 9e4; bodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9); bodyGyro.CFrame = root.CFrame; local bodyVelocity = Instance.new("BodyVelocity", root); bodyVelocity.Name = "FlyVelocity"; bodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9); bodyVelocity.Velocity = Vector3.new(0, 0, 0); local controls = {F = 0, B = 0, L = 0, R = 0, Q = 0, E = 0}
-        table.insert(FlyConnections, UserInputService.InputBegan:Connect(function(input, processed) if processed then return end; if input.UserInputType == Enum.UserInputType.Keyboard then local key = input.KeyCode.Name:lower(); if key == "w" then controls.F = Settings.FlySpeed elseif key == "s" then controls.B = -Settings.FlySpeed elseif key == "a" then controls.L = -Settings.FlySpeed elseif key == "d" then controls.R = Settings.FlySpeed elseif key == "e" then controls.Q = Settings.FlySpeed * 2 elseif key == "q" then controls.E = -Settings.FlySpeed * 2 end; Workspace.CurrentCamera.CameraType = Enum.CameraType.Track end end))
-        table.insert(FlyConnections, UserInputService.InputEnded:Connect(function(input, processed) if processed then return end; if input.UserInputType == Enum.UserInputType.Keyboard then local key = input.KeyCode.Name:lower(); if key == "w" then controls.F = 0 elseif key == "s" then controls.B = 0 elseif key == "a" then controls.L = 0 elseif key == "d" then controls.R = 0 elseif key == "e" then controls.Q = 0 elseif key == "q" then controls.E = 0 end end end))
-        table.insert(FlyConnections, RunService.RenderStepped:Connect(function() if not IsFlying then return end; local speed = (controls.L + controls.R ~= 0 or controls.F + controls.B ~= 0 or controls.Q + controls.E ~= 0) and 50 or 0; local camera = Workspace.CurrentCamera; if speed ~= 0 then bodyVelocity.Velocity = ((camera.CFrame.LookVector * (controls.F + controls.B)) + ((camera.CFrame * CFrame.new(controls.L + controls.R, (controls.F + controls.B + controls.Q + controls.E) * 0.2, 0).Position) - camera.CFrame.Position)) * speed else bodyVelocity.Velocity = Vector3.new(0, 0, 0) end; bodyGyro.CFrame = camera.CFrame end))
+        if IsFlying then return end
+        local character = LocalPlayer.Character
+        if not (character and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChildOfClass("Humanoid")) then return end
+        
+        local root = character:WaitForChild("HumanoidRootPart")
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        
+        IsFlying = true
+        saveFeatureStates()
+        humanoid.PlatformStand = true
+        
+        local bodyGyro = Instance.new("BodyGyro", root)
+        bodyGyro.Name = "FlyGyro"
+        bodyGyro.P = 9e4
+        bodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+        bodyGyro.CFrame = root.CFrame
+        
+        local bodyVelocity = Instance.new("BodyVelocity", root)
+        bodyVelocity.Name = "FlyVelocity"
+        bodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+        bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+        
+        -- Main fly animation
+        PlayAnim(10714347256, 4, 0)
+
+        local controls = {F = 0, B = 0, L = 0, R = 0, Q = 0, E = 0}
+        
+        table.insert(FlyConnections, UserInputService.InputBegan:Connect(function(input, processed)
+            if processed or not IsFlying then return end
+            if input.UserInputType == Enum.UserInputType.Keyboard then
+                local key = input.KeyCode.Name:lower()
+                if key == "w" then controls.F = 1; PlayAnim(10714177846, 4.65, 0)
+                elseif key == "s" then controls.B = -1; PlayAnim(10147823318, 4.11, 0)
+                elseif key == "a" then controls.L = -1; PlayAnim(10147823318, 3.55, 0)
+                elseif key == "d" then controls.R = 1; PlayAnim(10147823318, 4.81, 0)
+                elseif key == "e" then controls.Q = 1
+                elseif key == "q" then controls.E = -1 end
+            end
+        end))
+        
+        table.insert(FlyConnections, UserInputService.InputEnded:Connect(function(input, processed)
+            if processed or not IsFlying then return end
+            if input.UserInputType == Enum.UserInputType.Keyboard then
+                local key = input.KeyCode.Name:lower()
+                if key == "w" then controls.F = 0
+                elseif key == "s" then controls.B = 0
+                elseif key == "a" then controls.L = 0
+                elseif key == "d" then controls.R = 0
+                elseif key == "e" then controls.Q = 0
+                elseif key == "q" then controls.E = 0 end
+                
+                -- If no movement keys are pressed, return to idle fly animation
+                if controls.F == 0 and controls.B == 0 and controls.L == 0 and controls.R == 0 then
+                    PlayAnim(10714347256, 4, 0)
+                end
+            end
+        end))
+        
+        table.insert(FlyConnections, RunService.RenderStepped:Connect(function()
+            if not IsFlying then return end
+            
+            local speed = (controls.L + controls.R ~= 0 or controls.F + controls.B ~= 0 or controls.Q + controls.E ~= 0) and (Settings.FlySpeed * 50) or 0
+            local camera = Workspace.CurrentCamera
+            
+            if speed ~= 0 then
+                local moveVector = Vector3.new(controls.L + controls.R, controls.Q + controls.E, controls.F + controls.B)
+                bodyVelocity.Velocity = (camera.CFrame:VectorToWorldSpace(moveVector.Unit)) * speed
+            else
+                bodyVelocity.Velocity = Vector3.new(0, 0.1, 0) -- Slight upward force to counteract gravity
+            end
+            
+            bodyGyro.CFrame = camera.CFrame
+        end))
     end
 
     local function StopFly()
-        if not IsFlying then return end; IsFlying = false; saveFeatureStates(); local character = LocalPlayer.Character; if character and character:FindFirstChildOfClass("Humanoid") then character.Humanoid.PlatformStand = false end; for _, conn in pairs(FlyConnections) do conn:Disconnect() end; FlyConnections = {}; local root = character and character:FindFirstChild("HumanoidRootPart"); if root then if root:FindFirstChild("FlyGyro") then root.FlyGyro:Destroy() end; if root:FindFirstChild("FlyVelocity") then root.FlyVelocity:Destroy() end end; Workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+        if not IsFlying then return end
+        IsFlying = false
+        saveFeatureStates()
+        
+        StopAnim() -- Stop custom animations and re-enable default ones
+        
+        local character = LocalPlayer.Character
+        if character and character:FindFirstChildOfClass("Humanoid") then
+            character.Humanoid.PlatformStand = false
+        end
+        
+        for _, conn in pairs(FlyConnections) do conn:Disconnect() end
+        FlyConnections = {}
+        
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        if root then
+            if root:FindFirstChild("FlyGyro") then root.FlyGyro:Destroy() end
+            if root:FindFirstChild("FlyVelocity") then root.FlyVelocity:Destroy() end
+        end
+        
+        Workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
     end
 
     local function StopMobileFly()
-        if not IsFlying then return end; IsFlying = false; saveFeatureStates(); local character = LocalPlayer.Character; if character and character:FindFirstChildOfClass("Humanoid") then character.Humanoid.PlatformStand = false end; for _, conn in pairs(FlyConnections) do conn:Disconnect() end; FlyConnections = {}; local root = character and character:FindFirstChild("HumanoidRootPart"); if root then if root:FindFirstChild("FlyGyro") then root.FlyGyro:Destroy() end; if root:FindFirstChild("FlyVelocity") then root.FlyVelocity:Destroy() end end; Workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+        if not IsFlying then return end
+        IsFlying = false
+        saveFeatureStates()
+        
+        StopAnim() -- Stop custom animations
+
+        local character = LocalPlayer.Character
+        if character and character:FindFirstChildOfClass("Humanoid") then
+            character.Humanoid.PlatformStand = false
+        end
+        
+        for _, conn in pairs(FlyConnections) do conn:Disconnect() end
+        FlyConnections = {}
+        
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        if root then
+            if root:FindFirstChild("FlyGyro") then root.FlyGyro:Destroy() end
+            if root:FindFirstChild("FlyVelocity") then root.FlyVelocity:Destroy() end
+        end
+        
+        Workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
     end
 
     local function StartMobileFly()
-        if IsFlying then return end; local character = LocalPlayer.Character; if not (character and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChildOfClass("Humanoid")) then return end; local root = character:WaitForChild("HumanoidRootPart"); local humanoid = character:FindFirstChildOfClass("Humanoid"); local success, controlModule = pcall(require, LocalPlayer.PlayerScripts:WaitForChild("PlayerModule"):WaitForChild("ControlModule")); if not success then showNotification("Gagal memuat modul kontrol mobile.", Color3.fromRGB(255, 100, 100)); return end
-        IsFlying = true; saveFeatureStates(); humanoid.PlatformStand = true; local bodyVelocity = Instance.new("BodyVelocity", root); bodyVelocity.Name = "FlyVelocity"; bodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9); bodyVelocity.Velocity = Vector3.new(0, 0, 0); local bodyGyro = Instance.new("BodyGyro", root); bodyGyro.Name = "FlyGyro"; bodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9); bodyGyro.P = 1000; bodyGyro.D = 50
-        table.insert(FlyConnections, RunService.RenderStepped:Connect(function() if not IsFlying then return end; local camera = Workspace.CurrentCamera; if not (character and root and root:FindFirstChild("FlyVelocity") and root:FindFirstChild("FlyGyro")) then StopMobileFly(); return end; root.FlyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9); root.FlyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9); root.FlyGyro.CFrame = camera.CFrame; root.FlyVelocity.Velocity = Vector3.new(0, 0, 0); local direction = controlModule:GetMoveVector(); if direction.X ~= 0 then root.FlyVelocity.Velocity = root.FlyVelocity.Velocity + camera.CFrame.RightVector * (direction.X * (Settings.FlySpeed * 50)) end; if direction.Z ~= 0 then root.FlyVelocity.Velocity = root.FlyVelocity.Velocity - camera.CFrame.LookVector * (direction.Z * (Settings.FlySpeed * 50)) end end))
+        if IsFlying then return end
+        local character = LocalPlayer.Character
+        if not (character and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChildOfClass("Humanoid")) then return end
+        
+        local root = character:WaitForChild("HumanoidRootPart")
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        
+        local success, controlModule = pcall(require, LocalPlayer.PlayerScripts:WaitForChild("PlayerModule"):WaitForChild("ControlModule"))
+        if not success then
+            showNotification("Gagal memuat modul kontrol mobile.", Color3.fromRGB(255, 100, 100))
+            return
+        end
+        
+        IsFlying = true
+        saveFeatureStates()
+        humanoid.PlatformStand = true
+        
+        local bodyVelocity = Instance.new("BodyVelocity", root)
+        bodyVelocity.Name = "FlyVelocity"
+        bodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+        bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+        
+        local bodyGyro = Instance.new("BodyGyro", root)
+        bodyGyro.Name = "FlyGyro"
+        bodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+        bodyGyro.P = 1000
+        bodyGyro.D = 50
+        
+        PlayAnim(10714347256, 4, 0) -- Idle fly animation
+
+        table.insert(FlyConnections, RunService.RenderStepped:Connect(function()
+            if not IsFlying then return end
+            
+            local camera = Workspace.CurrentCamera
+            if not (character and root and root:FindFirstChild("FlyVelocity") and root:FindFirstChild("FlyGyro")) then
+                StopMobileFly()
+                return
+            end
+            
+            root.FlyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+            root.FlyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+            root.FlyGyro.CFrame = camera.CFrame
+            
+            local direction = controlModule:GetMoveVector()
+            local speed = Settings.FlySpeed * 50
+            
+            if direction.Magnitude > 0.1 then -- If player is moving
+                root.FlyVelocity.Velocity = (camera.CFrame.RightVector * direction.X + camera.CFrame.LookVector * -direction.Z) * speed
+                -- Play forward animation for any movement on mobile for simplicity
+                PlayAnim(10714177846, 4.65, 0) 
+            else -- Player is idle
+                root.FlyVelocity.Velocity = Vector3.new(0, 0.1, 0) -- Counteract gravity
+                PlayAnim(10714347256, 4, 0) -- Idle animation
+            end
+        end))
     end
 
     local function ToggleNoclip(enabled)
