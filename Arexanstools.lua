@@ -541,7 +541,7 @@ task.spawn(function()
     -- Moved all these declarations to the higher scope to fix "out of local registers" error
     local Players, UserInputService, RunService, Workspace, LocalPlayer, TweenService, Lighting, MaterialService, TeleportService
     local Settings, IsFlying, IsNoclipEnabled, IsGodModeEnabled, IsWalkSpeedEnabled, OriginalWalkSpeed, FlyConnections, godModeConnection, IsInfinityJumpEnabled, infinityJumpConnection, PlayerButtons, CurrentPlayerFilter, touchFlingGui, isUpdatingPlayerList, isMiniToggleDraggable, IsAntiLagEnabled, antiLagConnection, IsShiftLockEnabled, shiftLockConnection
-    local IsFEInvisibleEnabled, feInvisSeat, IsEspNameEnabled, IsEspBodyEnabled, EspRenderConnection, espCache, IsBoostFPSEnabled, boostFpsOriginalSettings, boostFpsDescendantConnection
+    local IsFEInvisibleEnabled, feInvisSeat, IsEspNameEnabled, IsEspBodyEnabled, EspRenderConnection, espCache, IsBoostFPSEnabled, boostFpsOriginalSettings, boostFpsDescendantConnection, IsAntiAFKEnabled, antiAFKConnection
     local IsViewingPlayer, viewingPlayerConnection, currentlyViewedPlayer, SpectatorGui, originalPlayerCFrame, originalCameraSubject
     local isSpectatingLocation, spectateLocationGui, originalCameraProperties, spectateCameraConnections, areTeleportIconsVisible, isAutoLooping
     local isEmoteToggleDraggable, isAnimationToggleDraggable, isEmoteTransparent, isAnimationTransparent
@@ -601,6 +601,8 @@ task.spawn(function()
         antiLagConnection = nil 
         IsShiftLockEnabled = false
         shiftLockConnection = nil
+        IsAntiAFKEnabled = false
+        antiAFKConnection = nil
     
         -- [[ FE INVISIBLE INTEGRATION ]]
         IsFEInvisibleEnabled = false
@@ -3464,6 +3466,25 @@ task.spawn(function()
         antifling_enabled = enabled; saveFeatureStates(); if enabled and not antifling_connection then antifling_connection = RunService.Heartbeat:Connect(protect_character) elseif not enabled and antifling_connection then antifling_connection:Disconnect(); antifling_connection = nil end
     end
 
+    local function ToggleAntiAFK(enabled)
+        IsAntiAFKEnabled = enabled
+        saveFeatureStates()
+        if enabled then
+            if not antiAFKConnection then
+                antiAFKConnection = ConnectEvent(LocalPlayer.Idled, function()
+                    local VirtualUser = game:GetService("VirtualUser")
+                    VirtualUser:CaptureController()
+                    VirtualUser:ClickButton2(Vector2.new())
+                end)
+            end
+        else
+            if antiAFKConnection then
+                antiAFKConnection:Disconnect()
+                antiAFKConnection = nil
+            end
+        end
+    end
+
     -- [[ AWAL INTEGRASI FUNGSI MAGNET.LUA ]]
     local stopMagnet, playMagnet, scanForParts, createMagnetGUI
 
@@ -4729,6 +4750,25 @@ task.spawn(function()
     end
     -- [[ PERUBAHAN BESAR SELESAI ]]
     
+    local function Rejoin()
+        saveFeatureStates()
+        saveGuiPositions()
+        
+        if queue_on_teleport and type(queue_on_teleport) == "function" then
+            local loaderCode = "loadstring(game:HttpGet('" .. SCRIPT_URL .. "'))()"
+            queue_on_teleport(loaderCode)
+            showNotification("Re-eksekusi terjadwal, bergabung kembali...", Color3.fromRGB(50, 150, 255))
+        else
+            showNotification("Executor tidak mendukung 'queue_on_teleport'. Gunakan auto-exec.", Color3.fromRGB(255, 150, 0))
+        end
+
+        task.wait(0.1)
+        
+        pcall(function()
+            TeleportService:Teleport(game.PlaceId, LocalPlayer)
+        end)
+    end
+
     local function HopServer()
         if SCRIPT_URL == "GANTI_DENGAN_URL_RAW_PASTEBIN_ATAU_GIST_ANDA" then
             showNotification("URL Skrip belum diatur! Lihat bagian atas skrip.", Color3.fromRGB(255, 100, 0))
@@ -5152,6 +5192,8 @@ task.spawn(function()
         createToggle(SettingsTabContent, "Anti-Lag", IsAntiLagEnabled, ToggleAntiLag).LayoutOrder = 5
         createToggle(SettingsTabContent, "Boost FPS", IsBoostFPSEnabled, ToggleBoostFPS).LayoutOrder = 6
         createToggle(SettingsTabContent, "Shift Lock", IsShiftLockEnabled, ToggleShiftLock).LayoutOrder = 9
+        createToggle(SettingsTabContent, "Anti AFK", IsAntiAFKEnabled, ToggleAntiAFK).LayoutOrder = 10
+        createButton(SettingsTabContent, "Rejoin", Rejoin).LayoutOrder = 10
         createButton(SettingsTabContent, "Tutup", CloseScript).LayoutOrder = 11
     
         local logoutButton = createButton(SettingsTabContent, "Logout", HandleLogout)
