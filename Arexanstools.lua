@@ -3166,7 +3166,7 @@ task.spawn(function()
             local camera = Workspace.CurrentCamera
             
             if speed ~= 0 then
-                local moveVector = Vector3.new(controls.L + controls.R, controls.Q + controls.E, controls.F + controls.B)
+                local moveVector = Vector3.new(controls.L + controls.R, controls.Q + controls.E, -(controls.F + controls.B))
                 bodyVelocity.Velocity = (camera.CFrame:VectorToWorldSpace(moveVector.Unit)) * speed
             else
                 bodyVelocity.Velocity = Vector3.new(0, 0.1, 0) -- Sedikit gaya ke atas untuk melawan gravitasi
