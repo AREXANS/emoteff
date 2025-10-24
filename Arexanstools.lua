@@ -758,14 +758,59 @@ local function startAnimationLock()
         copyMovementMovers = {}
 
         -- [[ VARIABEL UNTUK FITUR KUNCI KECEPATAN ]] --
-        local speedLock_currentSpeed = 16
-        local speedLock_humanoid = nil
-        local speedLock_isEnforced = false
-        local speedLock_isPaused = false
-        local speedLock_connections = {}
-        local speedLock_lastTick = 0
-        local speedLock_tickInterval = 0.12
-        local speedLock_serverBaseline = nil
+        local isSpeedLockActive = false
+        local lockedSpeed = 16
+        local speedLockConnection = nil
+
+        -- [[ FUNGSI BARU UNTUK KUNCI KECEPATAN ]] --
+        local function stopSpeedLock()
+            if speedLockConnection then
+                speedLockConnection:Disconnect()
+                speedLockConnection = nil
+            end
+            local char = LocalPlayer.Character
+            if char then
+                local humanoid = char:FindFirstChildOfClass("Humanoid")
+                if humanoid then
+                    -- Mengatur ulang ke kecepatan jalan asli saat dinonaktifkan
+                    task.defer(function() humanoid.WalkSpeed = OriginalWalkSpeed end)
+                end
+            end
+        end
+
+        local function startSpeedLock()
+            stopSpeedLock() -- Hentikan loop yang ada sebelum memulai yang baru
+            
+            speedLockConnection = RunService.Heartbeat:Connect(function()
+                local char = LocalPlayer.Character
+                if not (isSpeedLockActive and char) then
+                    stopSpeedLock()
+                    return
+                end
+                
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                local humanoid = char:FindFirstChildOfClass("Humanoid")
+                
+                if hrp and humanoid and humanoid.Health > 0 then
+                    -- Logika utama kunci kecepatan
+                    local currentVelocity = hrp.AssemblyLinearVelocity
+                    local moveDirection = humanoid.MoveDirection
+                    
+                    if moveDirection.Magnitude > 0.1 then
+                        -- Terapkan kecepatan terkunci ke arah gerakan saat ini
+                        local newVelocity = Vector3.new(moveDirection.X, 0, moveDirection.Z).Unit * lockedSpeed
+                        hrp.AssemblyLinearVelocity = Vector3.new(newVelocity.X, currentVelocity.Y, newVelocity.Z)
+                    else
+                        -- Kurangi kecepatan secara bertahap saat berhenti untuk gerakan yang lebih halus
+                        local dampingFactor = 0.85
+                        hrp.AssemblyLinearVelocity = Vector3.new(currentVelocity.X * dampingFactor, currentVelocity.Y, currentVelocity.Z * dampingFactor)
+                    end
+                    
+                    -- Atur WalkSpeed ke nilai yang sama untuk konsistensi
+                    humanoid.WalkSpeed = lockedSpeed
+                end
+            end)
+        end
     
         -- ====================================================================
         -- == VARIABEL UNTUK FITUR EMOTE DAN ANIMASI (DIPISAHKAN)          ==
@@ -1372,9 +1417,9 @@ local function startAnimationLock()
             WalkSpeedValue = Settings.WalkSpeed,
             FlySpeedValue = Settings.FlySpeed,
             FEInvisibleTransparencyValue = Settings.FEInvisibleTransparency,
-            SpeedLockEnabled = speedLock_isEnforced,
-            SpeedLockValue = speedLock_currentSpeed,
-            AnimationLock = isAnimationLockEnabled -- [[ BARU ]]
+            AnimationLock = isAnimationLockEnabled, -- [[ BARU ]]
+            SpeedLock = isSpeedLockActive,
+            SpeedLockValue = lockedSpeed
         }
         
         pcall(function()
@@ -1412,9 +1457,9 @@ local function startAnimationLock()
                 Settings.WalkSpeed = decodedData.WalkSpeedValue or 16
                 Settings.FlySpeed = decodedData.FlySpeedValue or 1
                 Settings.FEInvisibleTransparency = decodedData.FEInvisibleTransparencyValue or 0.75
-                speedLock_isEnforced = decodedData.SpeedLockEnabled or false
-                speedLock_currentSpeed = decodedData.SpeedLockValue or 16
                 isAnimationLockEnabled = decodedData.AnimationLock or false -- [[ BARU ]]
+                isSpeedLockActive = decodedData.SpeedLock or false
+                lockedSpeed = decodedData.SpeedLockValue or 16
             end
         end)
         if not success then
@@ -2530,68 +2575,6 @@ local function startAnimationLock()
     -- == BAGIAN FUNGSI UTAMA (PLAYER, COMBAT, DLL)                      ==
     -- ====================================================================
 
-    -- [[ FUNGSI UNTUK FITUR KUNCI KECEPATAN ]] --
-    local speedLock_disconnectAll, speedLock_bindHumanoid
-    
-    local function speedLock_canonicalDefault()
-        local ok, val = pcall(function() return game:GetService("StarterPlayer").CharacterWalkSpeed end)
-        if ok and typeof(val) == "number" and val > 0 then return val end
-        return 16
-    end
-
-    local function speedLock_setWalkSpeed(humanoid, speed)
-        if humanoid and humanoid.Parent then
-            pcall(function() humanoid.WalkSpeed = speed end)
-        end
-    end
-
-    local function speedLock_canEnforce()
-        local h = speedLock_humanoid
-        if not speedLock_isEnforced then return false end
-        if not h or not h.Parent then return false end
-        if speedLock_isPaused then return false end
-        if h.Health <= 0 then return false end
-        if h.PlatformStand or h.Sit then return false end
-        local st = h:GetState()
-        if st == Enum.HumanoidStateType.Ragdoll or st == Enum.HumanoidStateType.FallingDown or st == Enum.HumanoidStateType.Physics or st == Enum.HumanoidStateType.GettingUp or st == Enum.HumanoidStateType.Seated then return false end
-        local hrp = h.Parent:FindFirstChild("HumanoidRootPart")
-        if hrp and hrp.Anchored then return false end
-        return true
-    end
-
-    local function speedLock_heartbeat()
-        if not speedLock_humanoid then return end
-        local t = tick()
-        if t - speedLock_lastTick < speedLock_tickInterval then return end
-        speedLock_lastTick = t
-        if not speedLock_canEnforce() then return end
-        if speedLock_humanoid.WalkSpeed ~= speedLock_currentSpeed then
-            speedLock_setWalkSpeed(speedLock_humanoid, speedLock_currentSpeed)
-        end
-    end
-
-    speedLock_disconnectAll = function()
-        for _, conn in ipairs(speedLock_connections) do
-            if conn then conn:Disconnect() end
-        end
-        speedLock_connections = {}
-    end
-    
-    local function speedLock_captureServerBaseline()
-        task.spawn(function()
-            local h = speedLock_humanoid
-            if not h or not h.Parent then return end
-            local start = tick()
-            local last = h.WalkSpeed
-            while tick() - start < 0.6 do
-                last = h.WalkSpeed
-                task.wait(0.1)
-            end
-            if typeof(last) == "number" and last > 0 then
-                speedLock_serverBaseline = last
-            end
-        end)
-    end
 
 -- [[ BARU: Fungsi untuk mengembalikan animasi ke bawaan game ]]
 local function restoreOriginalGameAnimations()
@@ -2678,52 +2661,7 @@ local function stopAnimationLock()
 end
 -- [[ AKHIR FUNGSI KUNCI ANIMASI ]]
 
-    local function speedLock_applyDisabledState()
-        local h = speedLock_humanoid
-        if not h or not h.Parent then return end
-        local target = speedLock_serverBaseline or speedLock_canonicalDefault()
-        speedLock_setWalkSpeed(h, target)
-        speedLock_captureServerBaseline()
-    end
-
-    speedLock_bindHumanoid = function(humanoid)
-        if not humanoid then return end
-        speedLock_humanoid = humanoid
-        speedLock_disconnectAll()
-
-        table.insert(speedLock_connections, humanoid:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
-            if speedLock_isEnforced and speedLock_canEnforce() and humanoid.WalkSpeed ~= speedLock_currentSpeed then
-                speedLock_setWalkSpeed(humanoid, speedLock_currentSpeed)
-            end
-        end))
-
-        table.insert(speedLock_connections, humanoid.StateChanged:Connect(function(_, new)
-            if new == Enum.HumanoidStateType.Ragdoll or new == Enum.HumanoidStateType.FallingDown or new == Enum.HumanoidStateType.Physics or new == Enum.HumanoidStateType.GettingUp or new == Enum.HumanoidStateType.Seated then
-                speedLock_isPaused = true
-                task.delay(1.0, function() speedLock_isPaused = false end)
-            end
-        end))
-        
-        table.insert(speedLock_connections, humanoid:GetPropertyChangedSignal("PlatformStand"):Connect(function() 
-            speedLock_isPaused = humanoid.PlatformStand 
-        end))
-
-        table.insert(speedLock_connections, humanoid.AncestryChanged:Connect(function(_, parent)
-            if not parent then speedLock_disconnectAll() end
-        end))
-
-        if speedLock_isEnforced then
-            if not table.find(speedLock_connections, "heartbeat") then
-                speedLock_lastTick = 0
-                local conn = RunService.Heartbeat:Connect(speedLock_heartbeat)
-                table.insert(speedLock_connections, conn)
-            end
-            if speedLock_canEnforce() then speedLock_setWalkSpeed(humanoid, speedLock_currentSpeed) end
-        else
-            speedLock_applyDisabledState()
-        end
-    end
-    -- [[ AKHIR FUNGSI KUNCI KECEPATAN ]]
+-- [[ AKHIR FUNGSI KUNCI KECEPATAN ]]
 
     local stopSpectate; -- Deklarasi awal
     local cycleSpectate;
@@ -5180,38 +5118,22 @@ end
         createToggle(GeneralTabContent, "ESP Tubuh", IsEspBodyEnabled, ToggleESPBody)
         createSlider(GeneralTabContent, "Kecepatan Jalan", 0, Settings.MaxWalkSpeed, Settings.WalkSpeed, "", 1, function(v) Settings.WalkSpeed = v; if IsWalkSpeedEnabled and LocalPlayer.Character and LocalPlayer.Character.Humanoid then LocalPlayer.Character.Humanoid.WalkSpeed = v end end)
         createToggle(GeneralTabContent, "Jalan Cepat", IsWalkSpeedEnabled, function(v) IsWalkSpeedEnabled = v; ToggleWalkSpeed(v) end)
-        
         -- [[ INTEGRASI KUNCI KECEPATAN UI ]] --
-        createSlider(GeneralTabContent, "Kecepatan Terkunci", 0, 200, speedLock_currentSpeed, "", 1, function(v) 
-            speedLock_currentSpeed = v
-            if speedLock_isEnforced and speedLock_canEnforce() then
-                speedLock_setWalkSpeed(speedLock_humanoid, speedLock_currentSpeed)
+        createSlider(GeneralTabContent, "Kecepatan Terkunci", 0, 100, lockedSpeed, " stud/s", 1, function(v)
+            lockedSpeed = v
+            if isSpeedLockActive then
+                startSpeedLock() -- Mulai ulang loop dengan kecepatan baru
             end
+            saveFeatureStates() -- Simpan nilai baru
         end)
-        createToggle(GeneralTabContent, "Kunci Kecepatan", speedLock_isEnforced, function(state)
-            speedLock_isEnforced = state
-            local h = speedLock_humanoid
-            if not h or not h.Parent then return end
-            
-            if state then
-                if not next(speedLock_connections) then -- Re-bind if connections were lost
-                    speedLock_bindHumanoid(h)
-                end
-                if not table.find(speedLock_connections, "heartbeat") then
-                    speedLock_lastTick = 0
-                    local conn = RunService.Heartbeat:Connect(speedLock_heartbeat)
-                    table.insert(speedLock_connections, conn)
-                end
-                if speedLock_canEnforce() then speedLock_setWalkSpeed(h, speedLock_currentSpeed) end
-                showNotification("Kunci Kecepatan diaktifkan", Color3.fromRGB(50, 200, 50))
+        createToggle(GeneralTabContent, "Kunci Kecepatan", isSpeedLockActive, function(v)
+            isSpeedLockActive = v
+            if isSpeedLockActive then
+                startSpeedLock()
             else
-                speedLock_disconnectAll()
-                speedLock_applyDisabledState()
-                -- Re-bind essential listeners after disconnecting all
-                task.wait(0.1)
-                speedLock_bindHumanoid(h)
-                showNotification("Kunci Kecepatan dinonaktifkan", Color3.fromRGB(200, 150, 50))
+                stopSpeedLock()
             end
+            saveFeatureStates()
         end)
         
         createSlider(GeneralTabContent, "Kecepatan Terbang", 0, Settings.MaxFlySpeed, Settings.FlySpeed, "", 0.1, function(v) Settings.FlySpeed = v end)
@@ -6767,9 +6689,6 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
         ToggleShiftLock(IsShiftLockEnabled)
 
         -- [[ INTEGRASI KUNCI KECEPATAN ]] --
-        if character:FindFirstChildOfClass("Humanoid") then
-            speedLock_bindHumanoid(character:FindFirstChildOfClass("Humanoid"))
-        end
 
         -- Untuk fitur yang memerlukan logika khusus saat respawn
         if IsInvisibleGhostEnabled then
