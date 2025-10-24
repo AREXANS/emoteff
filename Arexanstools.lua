@@ -6202,6 +6202,10 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
             local humanoid = char and char:FindFirstChildOfClass("Humanoid")
             if not (hrp and humanoid) then if onComplete then onComplete() end; return end
         
+            pcall(function()
+                hrp:SetNetworkOwner(LocalPlayer)
+            end)
+        
             originalPlaybackWalkSpeed = humanoid.WalkSpeed
             IsPlaybackActive = true
             local animateScript = char and char:FindFirstChild("Animate")
@@ -6220,7 +6224,7 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
             playbackMovers = {}
         
             pcall(function()
-                local responsivenessValue = isAnimationBypassEnabled and 35 or 200
+                local responsivenessValue = 50 -- 🔥 PERUBAHAN: Mengurangi nilai untuk gerakan lebih halus
                 local attachment = Instance.new("Attachment", hrp); attachment.Name = "ReplayAttachment"
                 local alignPos = Instance.new("AlignPosition", attachment); alignPos.Attachment0 = attachment; alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment; alignPos.Responsiveness = responsivenessValue; alignPos.MaxForce = 100000
                 local alignOrient = Instance.new("AlignOrientation", attachment); alignOrient.Attachment0 = attachment; alignOrient.Mode = Enum.OrientationAlignmentMode.OneAttachment; alignOrient.Responsiveness = 200; alignOrient.MaxTorque = 100000
@@ -6254,6 +6258,12 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
             local lastFrameIndex = 1
             local wasPaused = false
             
+            -- 🔥 BARU: Parameter untuk Raycast
+            local raycastParams = RaycastParams.new()
+            raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+            raycastParams.FilterDescendantsInstances = {char}
+            raycastParams.IgnoreWater = true
+
             playbackConnection = RunService.RenderStepped:Connect(function(dt)
                 if not isPlaying then
                     if playbackConnection then playbackConnection:Disconnect(); playbackConnection = nil end
@@ -6277,7 +6287,7 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
                     
                     -- Buat ulang mover karena telah dihancurkan saat jeda
                     pcall(function()
-                        local responsivenessValue = isAnimationBypassEnabled and 35 or 200
+                        local responsivenessValue = 50 -- 🔥 PERUBAHAN: Mengurangi nilai untuk gerakan lebih halus
                         local attachment = Instance.new("Attachment", hrp); attachment.Name = "ReplayAttachment"
                         local alignPos = Instance.new("AlignPosition", attachment); alignPos.Attachment0 = attachment; alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment; alignPos.Responsiveness = responsivenessValue; alignPos.MaxForce = 100000
                         local alignOrient = Instance.new("AlignOrientation", attachment); alignOrient.Attachment0 = attachment; alignOrient.Mode = Enum.OrientationAlignmentMode.OneAttachment; alignOrient.Responsiveness = 200; alignOrient.MaxTorque = 100000
@@ -6331,6 +6341,20 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
 
 
                 local currentState = currentFrame.state
+
+                -- 🔥 BARU: Logika Raycast untuk mencegah melayang
+                if isAnimationBypassEnabled and currentState ~= "Enum.HumanoidStateType.Jumping" and currentState ~= "Enum.HumanoidStateType.Freefall" then
+                    local rayOrigin = interpolatedCFrame.Position + Vector3.new(0, 2, 0)
+                    local rayDirection = Vector3.new(0, -10, 0)
+                    local raycastResult = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+                    
+                    if raycastResult and raycastResult.Instance then
+                        local groundPosition = raycastResult.Position
+                        local hipHeight = humanoid.HipHeight
+                        -- Ganti posisi Y dari CFrame dengan posisi tanah + tinggi pinggul
+                        interpolatedCFrame = CFrame.new(interpolatedCFrame.Position.X, groundPosition.Y + hipHeight, interpolatedCFrame.Position.Z) * (interpolatedCFrame - interpolatedCFrame.Position)
+                    end
+                end
                 
                 if not isAnimationBypassEnabled then
                     if playbackMovers.alignPos then
@@ -6377,18 +6401,38 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
                     -- Set WalkSpeed dynamically to let the default Animate script handle walk/run transitions
                     humanoid.WalkSpeed = velocity
 
-                    -- Gerakkan karakter menggunakan AlignPosition dan AlignOrientation untuk FE
-                    if playbackMovers.alignPos and playbackMovers.alignOrient then
-                        playbackMovers.alignPos.Position = interpolatedCFrame.Position
-                        -- Shiftlock Fix v4: Explicitly check for the script's own shift lock feature
-                        if IsShiftLockEnabled then
-                            playbackMovers.alignOrient.Enabled = false
-                        else
-                            playbackMovers.alignOrient.Enabled = true
-                            playbackMovers.alignOrient.CFrame = interpolatedCFrame
+                    -- [[ PERBAIKAN LOMPATAN v2 & Gerakan Karakter ]]
+                    if currentState == "Enum.HumanoidStateType.Jumping" then
+                        -- Panggil ChangeState untuk memicu animasi dan impuls lompatan
+                        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                        -- Nonaktifkan align position sementara agar fisika lompatan tidak dilawan
+                        if playbackMovers.alignPos then
+                            playbackMovers.alignPos.Enabled = false
+                        end
+                        -- Tetap aktifkan align orientation dan periksa shift lock
+                        if playbackMovers.alignOrient then
+                            if IsShiftLockEnabled then
+                                playbackMovers.alignOrient.Enabled = false
+                            else
+                                playbackMovers.alignOrient.Enabled = true
+                                playbackMovers.alignOrient.CFrame = interpolatedCFrame
+                            end
+                        end
+                    else
+                        -- Untuk semua state lain, aktifkan kembali align position dan perbarui
+                        if playbackMovers.alignPos then
+                            playbackMovers.alignPos.Enabled = true
+                            playbackMovers.alignPos.Position = interpolatedCFrame.Position
+                        end
+                        if playbackMovers.alignOrient then
+                            if IsShiftLockEnabled then
+                                playbackMovers.alignOrient.Enabled = false
+                            else
+                                playbackMovers.alignOrient.Enabled = true
+                                playbackMovers.alignOrient.CFrame = interpolatedCFrame
+                            end
                         end
                     end
-                    
                 end
         
                 pcall(function()
@@ -6519,7 +6563,7 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
         end)
 
         stopButton.MouseButton1Click:Connect(function()
-            stopActions()
+            stopPlayback()
         end)
 
         deleteSelectedButton.MouseButton1Click:Connect(function()
