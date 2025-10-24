@@ -4,215 +4,20 @@ local RunService = game:GetService("RunService")
 local isSmoothPaused = false
 local lastFrame, nextFrame
 
-local function smoothReset(rootPart)
-    if not rootPart then return end
-    local alignPos = rootPart:FindFirstChild("PlaybackAlignPos")
-    local alignOri = rootPart:FindFirstChild("PlaybackAlignOri")
-    if alignPos then
-        alignPos.Position = rootPart.Position
-        alignPos.Responsiveness = 150
-    end
-    if alignOri then
-        alignOri.CFrame = rootPart.CFrame
-        alignOri.Responsiveness = 150
-    end
-end
-
-function pausePlayback()
-    isPaused = true
-    isSmoothPaused = true
-    local char = game.Players.LocalPlayer.Character
-    if char then
-        local humanoid = char:FindFirstChildOfClass("Humanoid")
-        if humanoid then
-            humanoid:Move(Vector3.new(0,0,0))
-            humanoid:ChangeState(Enum.HumanoidStateType.Idle)
-            humanoid.WalkSpeed = 0
-        end
-    end
-end
-
-function resumePlayback()
-    isPaused = false
-    task.wait(0.05)
-    isSmoothPaused = false
-end
-
 function playNextRecording()
     if nextRecordingIndex then
-        local char = game.Players.LocalPlayer.Character
-        local rootPart = char and char:FindFirstChild("HumanoidRootPart")
-        if rootPart then smoothReset(rootPart) end
         task.wait(0.15)
         playRecording(nextRecordingIndex)
     end
 end
 
 -- Playback Loop Baru
-task.spawn(function()
-    RunService.RenderStepped:Connect(function(dt)
-        if isPaused or isSmoothPaused then return end
-        if IsPlaybackActive then return end
-        local player = game.Players.LocalPlayer
-        local char = player.Character
-        if not char then return end
-        local humanoid = char:FindFirstChildOfClass("Humanoid")
-        local rootPart = char:FindFirstChild("HumanoidRootPart")
-        if humanoid and rootPart and currentFrame and nextFrame then
-            local cf1 = CFrame.new(unpack(currentFrame.cframe))
-            local cf2 = CFrame.new(unpack(nextFrame.cframe))
-            local pos1, pos2 = cf1.Position, cf2.Position
-            local dist = (pos2 - pos1).Magnitude
-            local timeDelta = math.max(nextFrame.time - currentFrame.time, 0.016)
-            local dynamicSpeed = math.clamp((dist / timeDelta) * 1.15, 6, 22)
-            humanoid.WalkSpeed = dynamicSpeed
-
-            -- Tangani animasi lompat alami
-            local heightDelta = pos2.Y - pos1.Y
-            if heightDelta > 2 then
-                pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end)
-            elseif heightDelta < -2 then
-                pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Freefall) end)
-            else
-                -- Do not force Running here; let Animate select Walk vs Run based on WalkSpeed
-                if isAnimationBypassEnabled then
-                    pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Running) end)
-                end
-            end
-
-
-
-            -- Interpolasi halus posisi & orientasi
-            local alpha = math.clamp(dt / timeDelta, 0, 1)
-            local newCF = cf1:Lerp(cf2, alpha * 0.3 + 0.7)
-            rootPart.CFrame = rootPart.CFrame:Lerp(newCF, 0.35)
-
-            -- ✅ Dynamic FE Run Sync Patch v5 (Smooth & Realistic)
-if isAnimationBypassEnabled then
-    -- Hitung kecepatan aktual dari rekaman
-    local bypassSpeed = math.clamp((dist / timeDelta) * 1.15, 10, 30)
-    humanoid.WalkSpeed = bypassSpeed
-
-    -- Tentukan state sesuai gerakan vertikal
-    if heightDelta > 2 then
-        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-    elseif heightDelta < -2 then
-        humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
-    else
-        humanoid:ChangeState(Enum.HumanoidStateType.Running)
-    end
-
-    -- Posisi target dengan prediksi arah
-    local nextPos = newCF.Position + rootPart.CFrame.LookVector * 0.05
-
-    -- Tambahkan sedikit dorongan velocity agar animasi sinkron
-    local moveDir = (pos2 - pos1).Unit
-    rootPart.Velocity = moveDir * bypassSpeed * 1.1
-
-    -- Jalankan MoveTo agar server mengupdate posisi (FE)
-    humanoid:MoveTo(nextPos)
-
-    -- Perbaiki AlignPos agar tidak delay
-    local alignPos = rootPart:FindFirstChild("PlaybackAlignPos")
-    if alignPos then
-        alignPos.Position = nextPos
-        alignPos.Responsiveness = 500
-    end
-
-    -- Tambahan: paksa animasi “running” aktif
-    if humanoid:FindFirstChild("Animator") then
-        local animator = humanoid.Animator
-        for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-            if track.Name:lower():find("run") then
-                track:AdjustSpeed(math.clamp(bypassSpeed / 16, 0.8, 2.2))
-            end
-        end
-    end
-end
-        end
-    end)
-end)
 
 
 
 --[[
-🔥 PATCH v2: Smooth Multi-Playback & Pause/Resume Fix
-===================================================
-- Peralihan antar rekaman sekarang halus, tanpa reset mendadak.
-- Pause/Resume kini menjaga posisi dan physics karakter agar tidak freeze atau teleport.
-- Kecepatan langkah (WalkSpeed) disesuaikan ulang setiap kali lanjut atau ganti rekaman.
-- Penambahan fungsi smoothReset(), pausePlayback(), resumePlayback(), dan playNextRecording().
---]]
-
-local isSmoothPaused = false
-
-local function smoothReset(rootPart)
-    if not rootPart then return end
-    local alignPos = rootPart:FindFirstChild("PlaybackAlignPos")
-    local alignOri = rootPart:FindFirstChild("PlaybackAlignOri")
-    if alignPos then
-        alignPos.Position = rootPart.Position
-        alignPos.Responsiveness = 100
-    end
-    if alignOri then
-        alignOri.CFrame = rootPart.CFrame
-        alignOri.Responsiveness = 100
-    end
-end
-
-function pausePlayback()
-    isPaused = true
-    isSmoothPaused = true
-    local char = game.Players.LocalPlayer.Character
-    if char then
-        local humanoid = char:FindFirstChildOfClass("Humanoid")
-        local rootPart = char:FindFirstChild("HumanoidRootPart")
-        if humanoid then
-            humanoid:Move(Vector3.new(0,0,0))
-            humanoid.WalkSpeed = 0
-        end
-        if rootPart then smoothReset(rootPart) end
-    end
-end
-
-function resumePlayback()
-    isPaused = false
-    task.wait(0.05)
-    isSmoothPaused = false
-end
-
-function playNextRecording()
-    if nextRecordingIndex then
-        local char = game.Players.LocalPlayer.Character
-        local rootPart = char and char:FindFirstChild("HumanoidRootPart")
-        if rootPart then smoothReset(rootPart) end
-        task.wait(0.1)
-        playRecording(nextRecordingIndex)
-    end
-end
 
 -- Integrasi ke playback utama (disisipkan di loop RunService.RenderStepped)
-task.spawn(function()
-    local RunService = game:GetService("RunService")
-    RunService.RenderStepped:Connect(function(dt)
-        if isPaused or isSmoothPaused then return end
-        if IsPlaybackActive then return end
-        local player = game.Players.LocalPlayer
-        local char = player.Character
-        if not char then return end
-        local humanoid = char:FindFirstChildOfClass("Humanoid")
-        local rootPart = char:FindFirstChild("HumanoidRootPart")
-        if humanoid and rootPart and currentFrame and nextFrame then
-            local distanceDelta = (CFrame.new(unpack(nextFrame.cframe)).Position - CFrame.new(unpack(currentFrame.cframe)).Position).Magnitude
-            local timeDelta = math.max(nextFrame.time - currentFrame.time, 0.001)
-            local dynamicSpeed = math.clamp(distanceDelta / timeDelta * 1.2, 6, 20)
-            humanoid.WalkSpeed = dynamicSpeed
-            local alpha = math.clamp(dt / timeDelta, 0, 1)
-            local interpolatedCFrame = CFrame.new(unpack(currentFrame.cframe)):Lerp(CFrame.new(unpack(nextFrame.cframe)), alpha)
-            rootPart.CFrame = rootPart.CFrame:Lerp(interpolatedCFrame, 0.25)
-        end
-    end)
-end)
 
 
 
@@ -565,6 +370,15 @@ task.spawn(function()
     -- ====================================================================
     local HttpService = game:GetService("HttpService")
     local CoreGui = game:GetService("CoreGui")
+    local currentUserRole = "Normal" -- << [NEW] Role variable
+
+    -- << [NEW] Permission checking function
+    local function hasPermission(requiredRole)
+        local hierarchy = {Free = 1, Normal = 2, VIP = 3, Developer = 4}
+        local userLevel = hierarchy[currentUserRole] or 1
+        local requiredLevel = hierarchy[requiredRole] or 1
+        return userLevel >= requiredLevel
+    end
 
     local function parseISO8601(iso)
         local y, mo, d, h, mi, s = iso:match("^(%d%d%d%d)-(%d%d)-(%d%d)T(%d%d):(%d%d):(%d%d)")
@@ -683,10 +497,12 @@ task.spawn(function()
     end
 
     -- [[ PERUBAHAN BARU: Fungsi untuk mengelola sesi login dipindahkan ke lingkup luar ]]
-    local function saveSession(expirationTimestamp)
+    local function saveSession(expirationTimestamp, userRole, userPassword)
         if not writefile then return end
         local sessionData = {
-            expiration = expirationTimestamp
+            expiration = expirationTimestamp,
+            role = userRole,
+            password = userPassword
         }
         pcall(function()
             writefile(SESSION_SAVE_FILE, HttpService:JSONEncode(sessionData))
@@ -695,20 +511,25 @@ task.spawn(function()
 
     local function loadSession()
         if not readfile or not isfile or not isfile(SESSION_SAVE_FILE) then
-            return nil
+            return nil, nil, nil -- No session file
         end
-        local success, result = pcall(function()
-            local content = readfile(SESSION_SAVE_FILE)
-            local data = HttpService:JSONDecode(content)
-            if type(data) == "table" and data.expiration and os.time() < data.expiration then
-                return data.expiration
+        local success, content = pcall(readfile, SESSION_SAVE_FILE)
+        if not success then return nil, nil, nil end
+
+        local success, data = pcall(HttpService.JSONDecode, HttpService, content)
+        if not success or type(data) ~= "table" then return nil, nil, nil end
+
+        -- Return password even if expired, but return nil for expiration and role if it is.
+        if data.password then
+            if data.expiration and os.time() < data.expiration then
+                return data.expiration, data.role or "Normal", data.password
+            else
+                -- Session expired, but we still have a password to re-validate
+                return nil, nil, data.password
             end
-            return nil
-        end)
-        if success and result then
-            return result
         end
-        return nil
+
+        return nil, nil, nil -- No password in session
     end
 
     local function deleteSession()
@@ -717,139 +538,222 @@ task.spawn(function()
         end
     end
 
-    local function InitializeMainGUI(expirationTimestamp)
+    -- Moved all these declarations to the higher scope to fix "out of local registers" error
+    local Players, UserInputService, RunService, Workspace, LocalPlayer, TweenService, Lighting, MaterialService, TeleportService
+    local Settings, IsFlying, IsNoclipEnabled, IsGodModeEnabled, IsWalkSpeedEnabled, OriginalWalkSpeed, FlyConnections, godModeConnection, IsInfinityJumpEnabled, infinityJumpConnection, PlayerButtons, CurrentPlayerFilter, touchFlingGui, isUpdatingPlayerList, isMiniToggleDraggable, IsAntiLagEnabled, antiLagConnection, IsShiftLockEnabled, shiftLockConnection
+    local IsFEInvisibleEnabled, feInvisSeat, IsEspNameEnabled, IsEspBodyEnabled, EspRenderConnection, espCache, IsBoostFPSEnabled, boostFpsOriginalSettings, boostFpsDescendantConnection, IsAntiAFKEnabled, antiAFKConnection
+    local IsViewingPlayer, viewingPlayerConnection, currentlyViewedPlayer, SpectatorGui, originalPlayerCFrame, originalCameraSubject
+    local isSpectatingLocation, spectateLocationGui, originalCameraProperties, spectateCameraConnections, areTeleportIconsVisible, isAutoLooping
+    local isEmoteToggleDraggable, isAnimationToggleDraggable, isEmoteTransparent, isAnimationTransparent
+    local isMagnetActive, magnetPower, magnetRange, magnetConnection, scannedParts, partGoals, scanCenterPosition, magnetMode, MagnetGUI
+    local PartControllerGUI, pc_config, pc_state, PC_MODES
+    local savedTeleportLocations, loadedGuiPositions, originalCharacterAppearance
+    local antifling_velocity_threshold, antifling_angular_threshold, antifling_last_safe_cframe, antifling_enabled, antifling_connection
+    local currentFlingTarget, flingLoopConnection, flingStartPosition, flingStatusGui
+    local isRecording, isPlaying, recordingConnection, playbackConnection, savedRecordings, currentRecordingData, loadedRecordingName, currentRecordingTarget
+    local isCopyingMovement, copiedPlayer, copyMovementConnection, copyAnimationCache, copyMovementMovers
+    local isEmoteEnabled, EmoteScreenGui, isAnimationEnabled, AnimationScreenGui, lastAnimations
+    local ScreenGui, MiniToggleContainer, MiniToggleButton, EmoteToggleButton, AnimationShowButton, MainFrame, TitleBar, ExpirationLabel, TabsFrame, ContentFrame
+    local PlayerTabContent, PlayerListContainer, GeneralTabContent, TeleportTabContent, VipTabContent, SettingsTabContent, RekamanTabContent
+    local PlayerListLayout, GeneralListLayout, TeleportListLayout, VipListLayout, SettingsListLayout, RekamanListLayout
+    local setupPlayerTab, setupGeneralTab, setupTeleportTab, setupVipTab, setupSettingsTab, setupRekamanTab
+    local startRecording, stopRecording, stopActions, stopPlayback
+
+    local function InitializeMainGUI(expirationTimestamp, userRole)
+        currentUserRole = userRole
         -- Layanan dan Variabel Global
-        local Players = game:GetService("Players")
-        local UserInputService = game:GetService("UserInputService")
-        local RunService = game:GetService("RunService")
-        local Workspace = game:GetService("Workspace")
-        local LocalPlayer = Players.LocalPlayer
-    local TweenService = game:GetService("TweenService")
-    local Lighting = game:GetService("Lighting")
-    local MaterialService = game:GetService("MaterialService")
-    local TeleportService = game:GetService("TeleportService")
+        Players = game:GetService("Players")
+        UserInputService = game:GetService("UserInputService")
+        RunService = game:GetService("RunService")
+        Workspace = game:GetService("Workspace")
+        LocalPlayer = Players.LocalPlayer
+        TweenService = game:GetService("TweenService")
+        Lighting = game:GetService("Lighting")
+        MaterialService = game:GetService("MaterialService")
+        TeleportService = game:GetService("TeleportService")
     
-    -- Pengaturan Default
-    local Settings = {
-        FlySpeed = 1,
-        WalkSpeed = 16,
-        MaxFlySpeed = 10,
-        MaxWalkSpeed = 500,
-        TeleportDistance = 100,
-        FEInvisibleTransparency = 0.75,
-    }
+        -- Pengaturan Default
+        Settings = {
+            FlySpeed = 1,
+            WalkSpeed = 16,
+            MaxFlySpeed = 10,
+            MaxWalkSpeed = 500,
+            TeleportDistance = 100,
+            FEInvisibleTransparency = 0.75,
+        }
     
-    -- Variabel Status
-    local IsFlying = false
-    local IsNoclipEnabled = false
-    local IsGodModeEnabled = false 
-    local IsWalkSpeedEnabled = false
-    local OriginalWalkSpeed = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") and LocalPlayer.Character:FindFirstChildOfClass("Humanoid").WalkSpeed or 16
-    local FlyConnections = {}
-    local godModeConnection = nil 
-    local IsInfinityJumpEnabled = false
-    local infinityJumpConnection = nil
-    local PlayerButtons = {} -- Cache untuk elemen UI pemain
-    local CurrentPlayerFilter = ""
-    local touchFlingGui = nil
-    local isUpdatingPlayerList = false 
-    local isMiniToggleDraggable = true 
-    local IsAntiLagEnabled = false 
-    local antiLagConnection = nil 
-    local IsShiftLockEnabled = false
-    local shiftLockConnection = nil
+        -- Variabel Status
+        IsFlying = false
+        IsNoclipEnabled = false
+        IsGodModeEnabled = false 
+        IsWalkSpeedEnabled = false
+        OriginalWalkSpeed = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") and LocalPlayer.Character:FindFirstChildOfClass("Humanoid").WalkSpeed or 16
+        FlyConnections = {}
+        godModeConnection = nil 
+        IsInfinityJumpEnabled = false
+        infinityJumpConnection = nil
+        PlayerButtons = {} -- Cache untuk elemen UI pemain
+        CurrentPlayerFilter = ""
+        touchFlingGui = nil
+        isUpdatingPlayerList = false 
+        isMiniToggleDraggable = true 
+        IsAntiLagEnabled = false 
+        antiLagConnection = nil 
+        IsShiftLockEnabled = false
+        shiftLockConnection = nil
+        IsAntiAFKEnabled = false
+        antiAFKConnection = nil
     
-    -- [[ FE INVISIBLE INTEGRATION ]]
-    local IsFEInvisibleEnabled = false
-    local feInvisSeat = nil
-    -- [[ END FE INVISIBLE INTEGRATION ]]
+        -- [[ FE INVISIBLE INTEGRATION ]]
+        IsFEInvisibleEnabled = false
+        feInvisSeat = nil
+        -- [[ END FE INVISIBLE INTEGRATION ]]
 
-    -- [[ PERUBAHAN DIMULAI: Variabel ESP dipisahkan ]]
-    local IsEspNameEnabled = false
-    local IsEspBodyEnabled = false
-    -- [[ PERUBAHAN SELESAI ]]
-    local EspRenderConnection = nil
-    local espCache = {} -- Cache untuk elemen GUI ESP agar tidak dibuat ulang terus-menerus
+        -- [[ PERUBAHAN DIMULAI: Variabel ESP dipisahkan ]]
+        IsEspNameEnabled = false
+        IsEspBodyEnabled = false
+        -- [[ PERUBAHAN SELESAI ]]
+        EspRenderConnection = nil
+        espCache = {} -- Cache untuk elemen GUI ESP agar tidak dibuat ulang terus-menerus
     
-    -- [[ INTEGRASI BOOST FPS ]] --
-    local IsBoostFPSEnabled = false
-    local boostFpsOriginalSettings = {}
-    local boostFpsDescendantConnection = nil
+        -- [[ INTEGRASI BOOST FPS ]] --
+        IsBoostFPSEnabled = false
+        boostFpsOriginalSettings = {}
+        boostFpsDescendantConnection = nil
     
-    -- [[ VARIABEL VIEW PLAYER ]] --
-    local IsViewingPlayer = false
-    local viewingPlayerConnection = nil
-    local currentlyViewedPlayer = nil
-    local SpectatorGui = nil
-    local originalPlayerCFrame = nil -- Untuk menyimpan CFrame asli pemain
-    local originalCameraSubject = nil -- Untuk menyimpan subjek kamera asli
+        -- [[ VARIABEL VIEW PLAYER ]] --
+        IsViewingPlayer = false
+        viewingPlayerConnection = nil
+        currentlyViewedPlayer = nil
+        SpectatorGui = nil
+        originalPlayerCFrame = nil -- Untuk menyimpan CFrame asli pemain
+        originalCameraSubject = nil -- Untuk menyimpan subjek kamera asli
     
-    -- [[ PERUBAHAN BARU: Variabel untuk Spectate Lokasi ]]
-    local isSpectatingLocation = false
-    local spectateLocationGui = nil
-    local originalCameraProperties = {}
-    local spectateCameraConnections = {}
-    local areTeleportIconsVisible = true
+        -- [[ PERUBAHAN BARU: Variabel untuk Spectate Lokasi ]]
+        isSpectatingLocation = false
+        spectateLocationGui = nil
+        originalCameraProperties = {}
+        spectateCameraConnections = {}
+        areTeleportIconsVisible = true
+        isAutoLooping = false
     
-    local isEmoteToggleDraggable = true
-    local isAnimationToggleDraggable = true
+        isEmoteToggleDraggable = true
+        isAnimationToggleDraggable = true
 
-    local isAnimationTransparent = true
+        isEmoteTransparent = true
+        isAnimationTransparent = true
 
-    -- Variabel Teleport
-    local savedTeleportLocations = {}
-    
-    -- Variabel untuk menyimpan posisi GUI
-    local loadedGuiPositions = nil
-    
-    -- Variabel untuk menyimpan status fitur
-    
-    -- Variabel untuk menyimpan data original karakter saat invisible
-    local originalCharacterAppearance = {}
+        -- [[ AWAL INTEGRASI MAGNET.LUA ]]
+        isMagnetActive = false
+        magnetPower = 999
+        magnetRange = 150
+        magnetConnection = nil
+        scannedParts = {}
+        partGoals = {}
+        scanCenterPosition = Vector3.zero
+        magnetMode = "target_player" -- "target_player" atau "random_free"
+        MagnetGUI = nil
+        -- [[ AKHIR INTEGRASI MAGNET.LUA ]]
 
-    -- Variabel AntiFling
-    local antifling_velocity_threshold = 85
-    local antifling_angular_threshold = 25
-    local antifling_last_safe_cframe = nil
-    local antifling_enabled = false
-    local antifling_connection = nil
-    
-    -- [[ VARIABEL UNTUK FITUR FLING ]] --
-    local currentFlingTarget = nil
-    local flingLoopConnection = nil
-    local flingStartPosition = nil 
-    local flingStatusGui = nil 
+        -- [[ AWAL INTEGRASI PARTCONTROLLER.LUA ]]
+        PartControllerGUI = nil
+        pc_config = {
+            partLimit = 100,
+            radius = 150,
+            magnetForce = 1000000,
+            speed = 5,
+            launchSpeed = 100,
+            updateRate = 0.03,
+            batchSize = 10
+        }
+        pc_state = {
+            mode = "bring",
+            active = false,
+            parts = {},
+            originalProperties = {},
+            removedItems = {},
+            timeOffset = 0,
+            connection = nil,
+            bodyPositions = {},
+            currentModeIndex = 1
+        }
+        PC_MODES = {
+            {n="Bring",v="bring"}, {n="Ring",v="ring"}, {n="Tornado",v="tornado"},
+            {n="Blackhole",v="blackhole"}, {n="Orbit",v="orbit"}, {n="Spiral",v="spiral"},
+            {n="Wave",v="wave"}, {n="Fountain",v="fountain"}, {n="Shield",v="shield"},
+            {n="Sphere",v="sphere"}, {n="Launch",v="launch"}, {n="Explosion",v="explosion"},
+            {n="Galaxy",v="galaxy"}, {n="DNA",v="dna"}, {n="Supernova",v="supernova"},
+            {n="Matrix",v="matrix"}, {n="Vortex",v="vortex"}, {n="Meteor",v="meteor"},
+            {n="Portal",v="portal"}, {n="Dragon",v="dragon"}, {n="Infinity",v="infinity"},
+            {n="Tsunami",v="tsunami"}, {n="Solar",v="solar"}, {n="Quantum",v="quantum"}
+        }
+        -- [[ AKHIR INTEGRASI PARTCONTROLLER.LUA ]]
 
-    -- [[ VARIABEL UNTUK FITUR REKAMAN ]] --
-    local isRecording = false
-    local isPlaying = false
-    local recordingConnection = nil
-    local playbackConnection = nil
-    local savedRecordings = {}
-    local currentRecordingData = {}
-    local loadedRecordingName = nil
-    local currentRecordingTarget = nil -- [[ PERUBAHAN BARU ]]
-
-    -- [[ VARIABEL UNTUK FITUR COPY MOVEMENT ]] --
-    local isCopyingMovement = false
-    local copiedPlayer = nil
-    local copyMovementConnection = nil
-    local copyAnimationCache = {}
-    local copyMovementMovers = {}
+        -- Variabel Teleport
+        savedTeleportLocations = {}
     
-    -- ====================================================================
-    -- == VARIABEL UNTUK FITUR EMOTE DAN ANIMASI (DIPISAHKAN)          ==
-    -- ====================================================================
-    local isEmoteEnabled = false
-    local EmoteScreenGui = nil
-    local isAnimationEnabled = false 
-    local AnimationScreenGui = nil 
+        -- Variabel untuk menyimpan posisi GUI
+        loadedGuiPositions = nil
     
-    -- Variabel Global untuk menyimpan animasi
-    local lastAnimations = {}
+        -- Variabel untuk menyimpan status fitur
+    
+        -- Variabel untuk menyimpan data original karakter saat invisible
+        originalCharacterAppearance = {}
 
-    -- Membuat GUI utama
-    local ScreenGui = Instance.new("ScreenGui")
+        -- Variabel AntiFling
+        antifling_velocity_threshold = 85
+        antifling_angular_threshold = 25
+        antifling_last_safe_cframe = nil
+        antifling_enabled = false
+        antifling_connection = nil
+    
+        -- [[ VARIABEL UNTUK FITUR FLING ]] --
+        currentFlingTarget = nil
+        flingLoopConnection = nil
+        flingStartPosition = nil 
+        flingStatusGui = nil 
+
+        -- [[ VARIABEL UNTUK FITUR REKAMAN ]] --
+        isRecording = false
+        isPlaying = false
+        recordingConnection = nil
+        playbackConnection = nil
+        savedRecordings = {}
+        currentRecordingData = {}
+        loadedRecordingName = nil
+        currentRecordingTarget = nil -- [[ PERUBAHAN BARU ]]
+
+        -- [[ VARIABEL UNTUK FITUR COPY MOVEMENT ]] --
+        isCopyingMovement = false
+        copiedPlayer = nil
+        copyMovementConnection = nil
+        copyAnimationCache = {}
+        copyMovementMovers = {}
+
+        -- [[ VARIABEL UNTUK FITUR KUNCI KECEPATAN ]] --
+        local speedLock_currentSpeed = 16
+        local speedLock_humanoid = nil
+        local speedLock_isEnforced = false
+        local speedLock_isPaused = false
+        local speedLock_connections = {}
+        local speedLock_lastTick = 0
+        local speedLock_tickInterval = 0.12
+        local speedLock_serverBaseline = nil
+    
+        -- ====================================================================
+        -- == VARIABEL UNTUK FITUR EMOTE DAN ANIMASI (DIPISAHKAN)          ==
+        -- ====================================================================
+        isEmoteEnabled = false
+        EmoteScreenGui = nil
+        isAnimationEnabled = false 
+        AnimationScreenGui = nil
+        local isGameAnimationOverrideActive = false -- [BARU] Lacak jika game menimpa animasi
+    
+        -- Variabel Global untuk menyimpan animasi
+        lastAnimations = {}
+
+        -- Membuat GUI utama
+        ScreenGui = Instance.new("ScreenGui")
     ScreenGui.Name = "ArexanstoolsGUI"
     ScreenGui.Parent = CoreGui
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -980,11 +884,56 @@ task.spawn(function()
     TitleLabel.Size = UDim2.new(1, 0, 1, 0)
     TitleLabel.Position = UDim2.new(0, 0, 0, 0)
     TitleLabel.BackgroundTransparency = 1
-    TitleLabel.Text = "Arexans Tools"
-    TitleLabel.TextColor3 = Color3.fromRGB(0, 200, 255)
-    TitleLabel.TextSize = 14
     TitleLabel.Font = Enum.Font.SourceSansBold
+    TitleLabel.TextSize = 14
     TitleLabel.Parent = TitleBar
+    
+    -- << [NEW] Role Display
+    local roleColors = {Normal = Color3.fromRGB(0, 255, 0), VIP = Color3.fromRGB(170, 0, 255), Developer = Color3.fromRGB(0, 170, 255), Free = Color3.fromRGB(128, 128, 128)}
+    local roleColor = roleColors[currentUserRole] or Color3.fromRGB(255, 255, 255)
+    
+    TitleLabel.Text = "Arexans Tools"
+    TitleLabel.TextColor3 = Color3.fromRGB(0, 170, 255)
+    TitleLabel.TextXAlignment = Enum.TextXAlignment.Center
+
+    local RoleLabel = Instance.new("TextButton")
+    RoleLabel.Name = "RoleLabel"
+    RoleLabel.BackgroundTransparency = 1
+    RoleLabel.Font = Enum.Font.SourceSansBold
+    RoleLabel.Text = currentUserRole
+    RoleLabel.TextColor3 = roleColor
+    RoleLabel.TextSize = 12
+    RoleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    RoleLabel.Size = UDim2.new(0, 60, 1, 0)
+    RoleLabel.Position = UDim2.new(0, 5, 0, 0)
+    RoleLabel.Parent = TitleBar
+    RoleLabel.AutoButtonColor = false
+
+    local InfoButton = Instance.new("TextButton")
+    InfoButton.Name = "InfoButton"
+    InfoButton.Size = UDim2.new(0, 20, 0, 20)
+    InfoButton.Position = UDim2.new(1, -25, 0.5, -10)
+    InfoButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+    InfoButton.Text = "i"
+    InfoButton.Font = Enum.Font.SourceSansBold
+    InfoButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    InfoButton.TextSize = 14
+    local infoCorner = Instance.new("UICorner", InfoButton)
+    infoCorner.CornerRadius = UDim.new(1, 0)
+    InfoButton.Parent = TitleBar
+
+    InfoButton.MouseButton1Click:Connect(function()
+        task.spawn(function()
+            local success, infoScript = pcall(function()
+                return game:HttpGet("https://raw.githubusercontent.com/AREXANS/emoteff/refs/heads/main/info.lua")
+            end)
+            if success and infoScript then
+                pcall(loadstring(infoScript))
+            else
+                warn("Gagal memuat atau menjalankan script info.")
+            end
+        end)
+    end)
 
     -- ExpirationLabel is now a child of MainFrame, positioned below the TitleBar
     local ExpirationLabel = Instance.new("TextLabel")
@@ -998,13 +947,16 @@ task.spawn(function()
     ExpirationLabel.Font = Enum.Font.SourceSans
     ExpirationLabel.Parent = MainFrame
     
-    local TabsFrame = Instance.new("Frame")
+    local TabsFrame = Instance.new("ScrollingFrame")
     TabsFrame.Name = "TabsFrame"
     TabsFrame.Size = UDim2.new(0, 60, 1, -45) -- Lebar diperkecil
     TabsFrame.Position = UDim2.new(0, 0, 0, 45) -- Y position adjusted for the 15px ExpirationLabel
     TabsFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
     TabsFrame.BorderSizePixel = 0
     TabsFrame.Parent = MainFrame
+    TabsFrame.ScrollingDirection = Enum.ScrollingDirection.Y
+    TabsFrame.ScrollBarThickness = 0
+    TabsFrame.ScrollBarImageColor3 = Color3.fromRGB(0, 150, 255)
     
     local TabListLayout = Instance.new("UIListLayout")
     TabListLayout.Name = "TabListLayout"
@@ -1013,6 +965,14 @@ task.spawn(function()
     TabListLayout.VerticalAlignment = Enum.VerticalAlignment.Top
     TabListLayout.FillDirection = Enum.FillDirection.Vertical
     TabListLayout.Parent = TabsFrame
+
+    local TabPadding = Instance.new("UIPadding", TabsFrame)
+    TabPadding.PaddingTop = UDim.new(0, 5)
+    TabPadding.PaddingBottom = UDim.new(0, 5)
+
+    TabListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        TabsFrame.CanvasSize = UDim2.new(0, 0, 0, TabListLayout.AbsoluteContentSize.Y)
+    end)
     
     local ContentFrame = Instance.new("Frame")
     ContentFrame.Name = "ContentFrame"
@@ -1038,7 +998,9 @@ task.spawn(function()
     PlayerListContainer.Position = UDim2.new(0, 0, 0, 55)
     PlayerListContainer.BackgroundTransparency = 1
     PlayerListContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
-    PlayerListContainer.ScrollBarThickness = 10
+    PlayerListContainer.ScrollBarThickness = 4
+    PlayerListContainer.ScrollBarImageColor3 = Color3.fromRGB(0, 150, 255)
+    PlayerListContainer.ElasticBehavior = Enum.ElasticBehavior.Never
     PlayerListContainer.VerticalScrollBarInset = Enum.ScrollBarInset.Always
     PlayerListContainer.ScrollingDirection = Enum.ScrollingDirection.Y
     PlayerListContainer.Parent = PlayerTabContent
@@ -1050,7 +1012,9 @@ task.spawn(function()
     GeneralTabContent.BackgroundTransparency = 1
     GeneralTabContent.Visible = false
     GeneralTabContent.CanvasSize = UDim2.new(0, 0, 0, 0) 
-    GeneralTabContent.ScrollBarThickness = 10
+    GeneralTabContent.ScrollBarThickness = 4
+    GeneralTabContent.ScrollBarImageColor3 = Color3.fromRGB(0, 150, 255)
+    GeneralTabContent.ElasticBehavior = Enum.ElasticBehavior.Never
     GeneralTabContent.VerticalScrollBarInset = Enum.ScrollBarInset.Always
     GeneralTabContent.ScrollingDirection = Enum.ScrollingDirection.Y
     GeneralTabContent.Parent = ContentFrame
@@ -1062,7 +1026,9 @@ task.spawn(function()
     TeleportTabContent.BackgroundTransparency = 1
     TeleportTabContent.Visible = false
     TeleportTabContent.CanvasSize = UDim2.new(0, 0, 0, 0)
-    TeleportTabContent.ScrollBarThickness = 10
+    TeleportTabContent.ScrollBarThickness = 4
+    TeleportTabContent.ScrollBarImageColor3 = Color3.fromRGB(0, 150, 255)
+    TeleportTabContent.ElasticBehavior = Enum.ElasticBehavior.Never
     TeleportTabContent.VerticalScrollBarInset = Enum.ScrollBarInset.Always
     TeleportTabContent.ScrollingDirection = Enum.ScrollingDirection.Y
     TeleportTabContent.Parent = ContentFrame
@@ -1074,7 +1040,9 @@ task.spawn(function()
     VipTabContent.BackgroundTransparency = 1
     VipTabContent.Visible = false
     VipTabContent.CanvasSize = UDim2.new(0, 0, 0, 0)
-    VipTabContent.ScrollBarThickness = 10
+    VipTabContent.ScrollBarThickness = 4
+    VipTabContent.ScrollBarImageColor3 = Color3.fromRGB(0, 150, 255)
+    VipTabContent.ElasticBehavior = Enum.ElasticBehavior.Never
     VipTabContent.VerticalScrollBarInset = Enum.ScrollBarInset.Always
     VipTabContent.ScrollingDirection = Enum.ScrollingDirection.Y
     VipTabContent.Parent = ContentFrame
@@ -1086,7 +1054,9 @@ task.spawn(function()
     SettingsTabContent.BackgroundTransparency = 1
     SettingsTabContent.Visible = false
     SettingsTabContent.CanvasSize = UDim2.new(0, 0, 0, 0)
-    SettingsTabContent.ScrollBarThickness = 10
+    SettingsTabContent.ScrollBarThickness = 4
+    SettingsTabContent.ScrollBarImageColor3 = Color3.fromRGB(0, 150, 255)
+    SettingsTabContent.ElasticBehavior = Enum.ElasticBehavior.Never
     SettingsTabContent.VerticalScrollBarInset = Enum.ScrollBarInset.Always
     SettingsTabContent.ScrollingDirection = Enum.ScrollingDirection.Y
     SettingsTabContent.Parent = ContentFrame
@@ -1179,19 +1149,18 @@ task.spawn(function()
     
     local function showNotification(message, color)
         local notifFrame = Instance.new("Frame", ScreenGui)
-        notifFrame.Size = UDim2.new(0, 250, 0, 40)
-        notifFrame.Position = UDim2.new(0.5, -125, 0, -50)
-        notifFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 25) -- Tema biru-hitam
-        notifFrame.BackgroundTransparency = 0.3 -- Tema transparan
+        notifFrame.Size = UDim2.new(0, 180, 0, 25) -- Perkecil ukuran frame
+        notifFrame.Position = UDim2.new(0.5, -90, 0, -30) -- Sesuaikan posisi awal
+        notifFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 25)
+        notifFrame.BackgroundTransparency = 0.3
         notifFrame.BorderSizePixel = 0
         
         local corner = Instance.new("UICorner", notifFrame)
-        corner.CornerRadius = UDim.new(0, 8)
+        corner.CornerRadius = UDim.new(0, 6) -- Sedikit perkecil corner
         
         local stroke = Instance.new("UIStroke", notifFrame)
-        -- Stroke akan menggunakan warna status (merah/hijau) atau biru default
         stroke.Color = color or Color3.fromRGB(0, 150, 255) 
-        stroke.Thickness = 1.5
+        stroke.Thickness = 1
         stroke.Transparency = 0.4
         
         local notifLabel = Instance.new("TextLabel", notifFrame)
@@ -1200,13 +1169,13 @@ task.spawn(function()
         notifLabel.BackgroundTransparency = 1
         notifLabel.Text = message
         notifLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        notifLabel.Font = Enum.Font.SourceSansBold
-        notifLabel.TextSize = 14
+        notifLabel.Font = Enum.Font.SourceSans -- Ganti ke font yang lebih tipis
+        notifLabel.TextSize = 12 -- Perkecil ukuran font
         notifLabel.TextWrapped = true
 
-        local tweenInfo = TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-        local startPosition = UDim2.new(0.5, -125, 0, -50)
-        local goalPosition = UDim2.new(0.5, -125, 0, 15)
+        local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out) -- Percepat animasi
+        local startPosition = UDim2.new(0.5, -90, 0, -30) -- Sesuaikan posisi
+        local goalPosition = UDim2.new(0.5, -90, 0, 10) -- Sesuaikan posisi akhir
         
         notifFrame.Position = startPosition
         TweenService:Create(notifFrame, tweenInfo, {Position = goalPosition}):Play()
@@ -1368,10 +1337,13 @@ task.spawn(function()
             -- [[ PERUBAHAN SELESAI ]]
             EmoteVIP = isEmoteEnabled,
             AnimationVIP = isAnimationEnabled,
+            EmoteTransparent = isEmoteTransparent,
             AnimationTransparent = isAnimationTransparent,
             WalkSpeedValue = Settings.WalkSpeed,
             FlySpeedValue = Settings.FlySpeed,
-            FEInvisibleTransparencyValue = Settings.FEInvisibleTransparency
+            FEInvisibleTransparencyValue = Settings.FEInvisibleTransparency,
+            SpeedLockEnabled = speedLock_isEnforced,
+            SpeedLockValue = speedLock_currentSpeed
         }
         
         pcall(function()
@@ -1402,12 +1374,15 @@ task.spawn(function()
                 IsEspBodyEnabled = decodedData.ESPBody or false
                 isEmoteEnabled = decodedData.EmoteVIP or false
                 isAnimationEnabled = decodedData.AnimationVIP or false
+                isEmoteTransparent = decodedData.EmoteTransparent ~= false
                 isAnimationTransparent = decodedData.AnimationTransparent or false
                 -- [[ PERUBAHAN SELESAI ]]
                 
                 Settings.WalkSpeed = decodedData.WalkSpeedValue or 16
                 Settings.FlySpeed = decodedData.FlySpeedValue or 1
                 Settings.FEInvisibleTransparency = decodedData.FEInvisibleTransparencyValue or 0.75
+                speedLock_isEnforced = decodedData.SpeedLockEnabled or false
+                speedLock_currentSpeed = decodedData.SpeedLockValue or 16
             end
         end)
         if not success then
@@ -1624,55 +1599,6 @@ task.spawn(function()
     local applyEmoteTransparency
     local applyAnimationTransparency
 
-    applyEmoteTransparency = function()
-        local emoteGui = CoreGui:FindFirstChild("EmoteGuiStandalone")
-        if not emoteGui then return end
-        local frame = emoteGui:FindFirstChild("MainFrame", true)
-        if not frame then return end
-    
-        local transValue = 0.8 -- Nilai transparansi permanen
-    
-        -- Terapkan ke semua elemen kunci
-        if frame then frame.BackgroundTransparency = transValue end
-        local header = frame:FindFirstChild("Header")
-        if header then header.BackgroundTransparency = transValue end
-        local searchBox = frame:FindFirstChild("SearchBox")
-        if searchBox then searchBox.BackgroundTransparency = transValue end
-        local resizeHandle = frame:FindFirstChild("EmoteResizeHandle")
-        if resizeHandle then resizeHandle.BackgroundTransparency = 0.85 end
-    
-        -- Terapkan ke tombol filter
-        local filterFrame = frame:FindFirstChild("FilterFrame")
-        if filterFrame then
-            for _, button in ipairs(filterFrame:GetDescendants()) do
-                if button:IsA("TextButton") then
-                    button.BackgroundTransparency = transValue
-                end
-            end
-        end
-    
-        -- Terapkan ke tombol emote di area gulir
-        local emoteArea = frame:FindFirstChild("EmoteArea")
-        if emoteArea then
-            for _, container in ipairs(emoteArea:GetChildren()) do
-                if container:IsA("Frame") then
-                    local button = container:FindFirstChild("EmoteImageButton")
-                    if button then button.BackgroundTransparency = transValue end
-                end
-            end
-        end
-    end
-
-    local function destroyEmoteGUI()
-        if CoreGui:FindFirstChild("EmoteGuiStandalone") then
-            CoreGui:FindFirstChild("EmoteGuiStandalone"):Destroy()
-        end
-        if EmoteScreenGui and EmoteScreenGui.Parent then
-            EmoteScreenGui:Destroy()
-            EmoteScreenGui = nil
-        end
-    end
-
     local function destroyAnimationGUI()
         if AnimationScreenGui and AnimationScreenGui.Parent then
             AnimationScreenGui:Destroy()
@@ -1680,7 +1606,390 @@ task.spawn(function()
         AnimationScreenGui = nil
     end
 
+    local function destroyEmoteGUI()
+        if EmoteScreenGui and EmoteScreenGui.Parent then
+            EmoteScreenGui:Destroy()
+            EmoteScreenGui = nil
+        end
+        -- Also destroy the new window if it exists
+        local existingGui = CoreGui:FindFirstChild("EmoteWindowGUI")
+        if existingGui then
+            existingGui:Destroy()
+        end
+    end
+
+    applyEmoteTransparency = function(isTransparent)
+        local frame = EmoteScreenGui and EmoteScreenGui:FindFirstChild("MainFrame")
+        if not frame then return end
+
+        local baseTransparency = isTransparent and 0.85 or 0
+        local handleTransparency = isTransparent and 0.85 or 0.5
+
+        -- Helper to apply transparency
+        local function applyTo(element, transparency)
+            if element then
+                element.BackgroundTransparency = transparency
+            end
+        end
+
+        applyTo(frame, baseTransparency)
+        applyTo(frame:FindFirstChild("Header"), baseTransparency)
+        applyTo(frame:FindFirstChild("SearchBox"), baseTransparency)
+        applyTo(frame:FindFirstChild("EmoteResizeHandle"), handleTransparency)
+
+        local filterFrame = frame:FindFirstChild("FilterFrame")
+        if filterFrame then
+            for _, button in ipairs(filterFrame:GetChildren()) do
+                if button:IsA("TextButton") then
+                    applyTo(button, baseTransparency)
+                end
+            end
+        end
+        
+        local emoteArea = frame:FindFirstChild("EmoteArea")
+        if emoteArea then
+            for _, container in ipairs(emoteArea:GetChildren()) do
+                if container:IsA("Frame") then
+                    local emoteButton = container:FindFirstChild("EmoteImageButton")
+                    local starButton = container:FindFirstChild("FavoriteButton")
+                    applyTo(emoteButton, baseTransparency)
+                    applyTo(starButton, baseTransparency)
+                end
+            end
+        end
+    end
+
+    local function initializeEmoteGUI()
+        if not hasPermission("VIP") then
+            showNotification("Silahkan upgrade ke VIP terlebih dahulu, Terimakasih", Color3.fromRGB(255,100,0))
+            return
+        end
+        if EmoteScreenGui and EmoteScreenGui.Parent then
+            destroyEmoteGUI()
+            return
+        end
+
+        loadFavorites()
+
+        EmoteScreenGui = Instance.new("ScreenGui")
+        EmoteScreenGui.Name = "EmoteWindowGUI"
+        EmoteScreenGui.Parent = CoreGui
+        EmoteScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        EmoteScreenGui.DisplayOrder = 11
+
+        local EmoteMainFrame = Instance.new("Frame")
+        EmoteMainFrame.Name = "MainFrame"
+        EmoteMainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+        EmoteMainFrame.Size = UDim2.new(0, 160, 0, 180)
+        EmoteMainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+        
+        if loadedGuiPositions and loadedGuiPositions.EmoteFrame then
+            local posData = loadedGuiPositions.EmoteFrame
+            pcall(function() 
+                EmoteMainFrame.Position = UDim2.new(posData.XScale, posData.XOffset, posData.YScale, posData.YOffset)
+                EmoteMainFrame.Size = UDim2.new(0, posData.SizeX or 160, 0, posData.SizeY or 180)
+            end)
+        end
+        
+        EmoteMainFrame.BackgroundColor3 = Color3.fromRGB(28, 43, 70)
+        EmoteMainFrame.BorderColor3 = Color3.fromRGB(90, 150, 255)
+        EmoteMainFrame.BorderSizePixel = 1
+        EmoteMainFrame.ClipsDescendants = true
+        EmoteMainFrame.Parent = EmoteScreenGui
+        EmoteMainFrame.Visible = true
+
+        local UICorner = Instance.new("UICorner", EmoteMainFrame)
+        UICorner.CornerRadius = UDim.new(0, 8)
+
+        local Header = Instance.new("TextButton") 
+        Header.Name = "Header"
+        Header.Size = UDim2.new(1, 0, 0, 30)
+        Header.BackgroundColor3 = Color3.fromRGB(48, 63, 90)
+        Header.BorderSizePixel = 0
+        Header.Text = "" 
+        Header.AutoButtonColor = false 
+        Header.Parent = EmoteMainFrame
+
+        local Title = Instance.new("TextLabel")
+        Title.Name = "Title"
+        Title.Size = UDim2.new(1, -40, 1, 0)
+        Title.Position = UDim2.new(0, 10, 0, 0)
+        Title.BackgroundTransparency = 1
+        Title.Font = Enum.Font.GothamBold
+        Title.Text = "Arexans Emotes [VIP]"
+        Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+        Title.TextXAlignment = Enum.TextXAlignment.Left
+        Title.Parent = Header
+
+        local CloseButton = Instance.new("TextButton")
+        CloseButton.Name = "CloseButton"
+        CloseButton.Size = UDim2.new(0, 20, 0, 20)
+        CloseButton.Position = UDim2.new(1, -15, 0.5, 0)
+        CloseButton.AnchorPoint = Vector2.new(0.5, 0.5)
+        CloseButton.BackgroundTransparency = 1
+        CloseButton.Font = Enum.Font.GothamBold
+        CloseButton.Text = "X"
+        CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        CloseButton.TextSize = 18
+        CloseButton.Parent = Header
+        CloseButton.MouseButton1Click:Connect(destroyEmoteGUI) 
+        
+        MakeDraggable(EmoteMainFrame, Header, function() return true end, nil)
+
+        local EmoteResizeHandle = Instance.new("TextButton")
+        EmoteResizeHandle.Name = "EmoteResizeHandle"
+        EmoteResizeHandle.Text = ""
+        EmoteResizeHandle.Size = UDim2.new(0, 15, 0, 15)
+        EmoteResizeHandle.Position = UDim2.new(1, -15, 1, -15)
+        EmoteResizeHandle.BackgroundColor3 = Color3.fromRGB(90, 150, 255)
+        EmoteResizeHandle.BorderSizePixel = 0
+        EmoteResizeHandle.ZIndex = 2
+        EmoteResizeHandle.Parent = EmoteMainFrame
+
+        EmoteResizeHandle.InputBegan:Connect(function(input)
+            if not (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then return end
+            local isResizing = true
+            local initialMousePosition = UserInputService:GetMouseLocation()
+            local initialFrameSize = EmoteMainFrame.AbsoluteSize
+            local inputChangedConnection, inputEndedConnection
+            inputChangedConnection = UserInputService.InputChanged:Connect(function(changedInput)
+                if isResizing and (changedInput.UserInputType == Enum.UserInputType.MouseMovement or changedInput.UserInputType == Enum.UserInputType.Touch) then
+                    local delta = UserInputService:GetMouseLocation() - initialMousePosition
+                    local newSizeX = math.max(160, initialFrameSize.X + delta.X)
+                    local newSizeY = math.max(180, initialFrameSize.Y + delta.Y)
+                    EmoteMainFrame.Size = UDim2.new(0, newSizeX, 0, newSizeY)
+                end
+            end)
+            inputEndedConnection = UserInputService.InputEnded:Connect(function(endedInput)
+                if endedInput.UserInputType == input.UserInputType then
+                    isResizing = false
+                    if inputChangedConnection then inputChangedConnection:Disconnect() end
+                    if inputEndedConnection then inputEndedConnection:Disconnect() end
+                    saveGuiPositions()
+                end
+            end)
+        end)
+
+        local SearchBox = Instance.new("TextBox")
+        SearchBox.Name = "SearchBox"
+        SearchBox.Size = UDim2.new(1, -20, 0, 25)
+        SearchBox.Position = UDim2.new(0, 10, 0, 35)
+        SearchBox.BackgroundColor3 = Color3.fromRGB(48, 63, 90)
+        SearchBox.PlaceholderText = "Cari emote..."
+        SearchBox.Text = ""
+        SearchBox.PlaceholderColor3 = Color3.fromRGB(180, 190, 210)
+        SearchBox.Font = Enum.Font.Gotham
+        SearchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+        SearchBox.ClearTextOnFocus = false
+        SearchBox.Parent = EmoteMainFrame
+        local SearchCorner = Instance.new("UICorner", SearchBox); SearchCorner.CornerRadius = UDim.new(0, 6)
+        local SearchPadding = Instance.new("UIPadding", SearchBox); SearchPadding.PaddingLeft = UDim.new(0, 10); SearchPadding.PaddingRight = UDim.new(0, 10)
+
+        local FilterFrame = Instance.new("Frame")
+        FilterFrame.Name = "FilterFrame"
+        FilterFrame.Size = UDim2.new(1, -20, 0, 25)
+        FilterFrame.Position = UDim2.new(0, 10, 0, 65)
+        FilterFrame.BackgroundTransparency = 1
+        FilterFrame.Parent = EmoteMainFrame
+
+        local FilterLayout = Instance.new("UIListLayout", FilterFrame)
+        FilterLayout.FillDirection = Enum.FillDirection.Horizontal
+        FilterLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        FilterLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+        FilterLayout.Padding = UDim.new(0, 5)
+
+        local filterButtons = {}
+        local favoriteFilterState = 1
+        local function createFilterButton(text, state)
+            local button = Instance.new("TextButton", FilterFrame)
+            button.Name = text .. "FilterButton"
+            button.Size = UDim2.new(0.33, -5, 1, 0)
+            button.Font = Enum.Font.SourceSansBold
+            button.Text = text
+            button.TextSize = 12
+            local btnCorner = Instance.new("UICorner", button); btnCorner.CornerRadius = UDim.new(0, 4)
+            table.insert(filterButtons, {button=button, state=state})
+            return button
+        end
+
+        local favButton = createFilterButton("Favorite", 2)
+        local allButton = createFilterButton("Semua", 1)
+        local unfavButton = createFilterButton("Unfavorite", 3)
+
+        local function updateFilterButtons()
+            for _, btnInfo in ipairs(filterButtons) do
+                local isActive = (btnInfo.state == favoriteFilterState)
+                btnInfo.button.BackgroundColor3 = isActive and Color3.fromRGB(90, 150, 255) or Color3.fromRGB(48, 63, 90)
+                btnInfo.button.TextColor3 = isActive and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(180, 190, 210)
+            end
+        end
+        
+        local EmoteArea = Instance.new("ScrollingFrame")
+        EmoteArea.Name = "EmoteArea"
+        EmoteArea.Size = UDim2.new(1, 0, 1, -100)
+        EmoteArea.Position = UDim2.new(0, 0, 0, 95)
+        EmoteArea.BackgroundTransparency = 1
+        EmoteArea.BorderSizePixel = 0
+        EmoteArea.ScrollBarImageColor3 = Color3.fromRGB(90, 150, 255)
+        EmoteArea.ScrollBarThickness = 5
+        EmoteArea.ScrollingDirection = Enum.ScrollingDirection.Y
+        EmoteArea.Parent = EmoteMainFrame
+        local UIPadding = Instance.new("UIPadding", EmoteArea); UIPadding.PaddingLeft = UDim.new(0, 10); UIPadding.PaddingRight = UDim.new(0, 10); UIPadding.PaddingTop = UDim.new(0, 5); UIPadding.PaddingBottom = UDim.new(0, 10)
+
+        local UIGridLayout = Instance.new("UIGridLayout")
+        UIGridLayout.CellPadding = UDim2.new(0, 4, 0, 4)
+        UIGridLayout.CellSize = UDim2.new(0, 32, 0, 44)
+        UIGridLayout.SortOrder = Enum.SortOrder.Name
+        UIGridLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        UIGridLayout.Parent = EmoteArea
+        
+        local function populateEmotes(filter)
+            filter = filter and filter:lower() or ""
+            for _, container in pairs(EmoteArea:GetChildren()) do
+                if container:IsA("Frame") and container:FindFirstChild("EmoteImageButton") then
+                    local isFavorite = favoriteEmotes[container.Name] == true
+                    local passesSearch = (filter == "" or container.Name:lower():find(filter, 1, true))
+                    
+                    local passesFavoriteFilter = false
+                    if favoriteFilterState == 1 then passesFavoriteFilter = true
+                    elseif favoriteFilterState == 2 then if isFavorite then passesFavoriteFilter = true end
+                    elseif favoriteFilterState == 3 then if not isFavorite then passesFavoriteFilter = true end
+                    end
+                    
+                    container.Visible = passesSearch and passesFavoriteFilter
+                end
+            end
+            task.wait()
+            EmoteArea.CanvasSize = UDim2.new(0, 0, 0, UIGridLayout.AbsoluteContentSize.Y)
+        end
+        
+        for _, btnInfo in ipairs(filterButtons) do
+            btnInfo.button.MouseButton1Click:Connect(function()
+                favoriteFilterState = btnInfo.state
+                updateFilterButtons()
+                loadFavorites() 
+                populateEmotes(SearchBox.Text)
+            end)
+        end
+        
+        updateFilterButtons()
+
+        local function toggleAnimation(animId)
+            local char = LocalPlayer.Character
+            if not char or not char:FindFirstChild("Humanoid") then return end
+            local humanoid = char.Humanoid
+            local animator = humanoid:FindFirstChildOfClass("Animator") or humanoid
+
+            -- Cari dan hentikan emote yang sedang berjalan
+            for _, playingTrack in ipairs(animator:GetPlayingAnimationTracks()) do
+                if playingTrack.Name == "ArexansEmoteTrack" then
+                    playingTrack:Stop(0.2)
+                    -- Jika emote yang sama diklik lagi, kita hanya menghentikannya.
+                    if playingTrack.Animation.AnimationId == animId then
+                        return
+                    end
+                end
+            end
+
+            -- Mainkan emote baru
+            local anim = Instance.new("Animation")
+            anim.AnimationId = animId
+            
+            local newTrack = animator:LoadAnimation(anim)
+            newTrack.Name = "ArexansEmoteTrack" -- Beri nama khusus untuk identifikasi
+            newTrack:Play(0.1)
+
+            anim:Destroy()
+        end
+
+        local function createEmoteButton(emoteData)
+            local container = Instance.new("Frame")
+            container.Name = emoteData.name
+            container.Size = UDim2.new(0, 32, 0, 44)
+            container.BackgroundTransparency = 1
+            container.Parent = EmoteArea
+
+            local button = Instance.new("ImageButton", container)
+            button.Name = "EmoteImageButton"
+            button.BackgroundColor3 = Color3.fromRGB(48, 63, 90)
+            button.BackgroundTransparency = isEmoteTransparent and 0.85 or 0
+            button.Size = UDim2.new(1, 0, 1, 0)
+            local corner = Instance.new("UICorner", button); corner.CornerRadius = UDim.new(0, 6)
+
+            local image = Instance.new("ImageLabel", button)
+            image.Size = UDim2.new(1, -4, 0, 30)
+            image.Position = UDim2.new(0.5, 0, 0, 2)
+            image.AnchorPoint = Vector2.new(0.5, 0)
+            image.BackgroundTransparency = 1
+            image.Image = "rbxthumb://type=Asset&id=" .. tostring(emoteData.id) .. "&w=420&h=420"
+
+            local nameLabel = Instance.new("TextLabel", button)
+            nameLabel.Size = UDim2.new(1, -4, 0, 10)
+            nameLabel.Position = UDim2.new(0, 2, 1, -11)
+            nameLabel.BackgroundTransparency = 1
+            nameLabel.Font = Enum.Font.Gotham
+            nameLabel.Text = emoteData.name
+            nameLabel.TextScaled = true
+            nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+
+            button.MouseButton1Click:Connect(function() toggleAnimation(emoteData.animationid) end)
+
+            local starButton = Instance.new("TextButton", container)
+            starButton.Name = "FavoriteButton"
+            starButton.Size = UDim2.new(0, 16, 0, 16)
+            starButton.Position = UDim2.new(1, 0, 0, 0)
+            starButton.AnchorPoint = Vector2.new(1, 0)
+            starButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        starButton.BackgroundTransparency = isEmoteTransparent and 0.85 or 0
+            starButton.Font = Enum.Font.SourceSansBold
+            starButton.Text = "♥"
+            starButton.TextSize = 12
+            starButton.ZIndex = 2
+            local starCorner = Instance.new("UICorner", starButton); starCorner.CornerRadius = UDim.new(0, 4)
+
+            local function updateStarVisual()
+                local isFavorite = favoriteEmotes[emoteData.name] == true
+                starButton.TextColor3 = isFavorite and Color3.fromRGB(255, 80, 120) or Color3.fromRGB(150, 150, 150)
+            end
+
+            starButton.MouseButton1Click:Connect(function()
+                favoriteEmotes[emoteData.name] = not favoriteEmotes[emoteData.name]
+                saveFavorites()
+                updateStarVisual()
+                populateEmotes(SearchBox.Text)
+            end)
+            updateStarVisual()
+        end
+
+        task.spawn(function()
+            local success, result = pcall(function() return HttpService:JSONDecode(game:HttpGet("https://raw.githubusercontent.com/AREXANS/emoteff/refs/heads/main/emote.json")) end)
+            if success and type(result) == "table" then
+                local existingEmotes = {}
+                for _, emote in pairs(result) do
+                    if emote.name and emote.animationid and emote.id and not existingEmotes[emote.name:lower()] then
+                        createEmoteButton(emote); existingEmotes[emote.name:lower()] = true
+                    end
+                end
+            else
+                warn("Gagal mengambil daftar emote:", result)
+            end
+            populateEmotes("")
+        end)
+        SearchBox:GetPropertyChangedSignal("Text"):Connect(function() populateEmotes(SearchBox.Text) end)
+
+        -- Apply initial transparency
+        applyEmoteTransparency(isEmoteTransparent)
+    end
+
     local function initializeAnimationGUI()
+        if isGameAnimationOverrideActive then
+            showNotification("Fitur animasi dinonaktifkan oleh game ini.", Color3.fromRGB(255, 150, 0))
+            return
+        end
+        if not hasPermission("VIP") then
+            showNotification("Silahkan upgrade ke VIP terlebih dahulu, Terimakasih", Color3.fromRGB(255,100,0))
+            return
+        end
         destroyAnimationGUI()
 
         pcall(function()
@@ -1861,6 +2170,7 @@ task.spawn(function()
                 
                 -- [[ FUNGSI PENERAPAN ANIMASI (DIPERBAIKI) ]]
                 local function setAnimation(animationType, animationId)
+                    if isGameAnimationOverrideActive then return end
                     local function saveLastAnimations() 
                         if writefile then 
                             pcall(function() 
@@ -2209,6 +2519,116 @@ task.spawn(function()
     -- == BAGIAN FUNGSI UTAMA (PLAYER, COMBAT, DLL)                      ==
     -- ====================================================================
 
+    -- [[ FUNGSI UNTUK FITUR KUNCI KECEPATAN ]] --
+    local speedLock_disconnectAll, speedLock_bindHumanoid
+    
+    local function speedLock_canonicalDefault()
+        local ok, val = pcall(function() return game:GetService("StarterPlayer").CharacterWalkSpeed end)
+        if ok and typeof(val) == "number" and val > 0 then return val end
+        return 16
+    end
+
+    local function speedLock_setWalkSpeed(humanoid, speed)
+        if humanoid and humanoid.Parent then
+            pcall(function() humanoid.WalkSpeed = speed end)
+        end
+    end
+
+    local function speedLock_canEnforce()
+        local h = speedLock_humanoid
+        if not speedLock_isEnforced then return false end
+        if not h or not h.Parent then return false end
+        if speedLock_isPaused then return false end
+        if h.Health <= 0 then return false end
+        if h.PlatformStand or h.Sit then return false end
+        local st = h:GetState()
+        if st == Enum.HumanoidStateType.Ragdoll or st == Enum.HumanoidStateType.FallingDown or st == Enum.HumanoidStateType.Physics or st == Enum.HumanoidStateType.GettingUp or st == Enum.HumanoidStateType.Seated then return false end
+        local hrp = h.Parent:FindFirstChild("HumanoidRootPart")
+        if hrp and hrp.Anchored then return false end
+        return true
+    end
+
+    local function speedLock_heartbeat()
+        if not speedLock_humanoid then return end
+        local t = tick()
+        if t - speedLock_lastTick < speedLock_tickInterval then return end
+        speedLock_lastTick = t
+        if not speedLock_canEnforce() then return end
+        if speedLock_humanoid.WalkSpeed ~= speedLock_currentSpeed then
+            speedLock_setWalkSpeed(speedLock_humanoid, speedLock_currentSpeed)
+        end
+    end
+
+    speedLock_disconnectAll = function()
+        for _, conn in ipairs(speedLock_connections) do
+            if conn then conn:Disconnect() end
+        end
+        speedLock_connections = {}
+    end
+    
+    local function speedLock_captureServerBaseline()
+        task.spawn(function()
+            local h = speedLock_humanoid
+            if not h or not h.Parent then return end
+            local start = tick()
+            local last = h.WalkSpeed
+            while tick() - start < 0.6 do
+                last = h.WalkSpeed
+                task.wait(0.1)
+            end
+            if typeof(last) == "number" and last > 0 then
+                speedLock_serverBaseline = last
+            end
+        end)
+    end
+
+    local function speedLock_applyDisabledState()
+        local h = speedLock_humanoid
+        if not h or not h.Parent then return end
+        local target = speedLock_serverBaseline or speedLock_canonicalDefault()
+        speedLock_setWalkSpeed(h, target)
+        speedLock_captureServerBaseline()
+    end
+
+    speedLock_bindHumanoid = function(humanoid)
+        if not humanoid then return end
+        speedLock_humanoid = humanoid
+        speedLock_disconnectAll()
+
+        table.insert(speedLock_connections, humanoid:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+            if speedLock_isEnforced and speedLock_canEnforce() and humanoid.WalkSpeed ~= speedLock_currentSpeed then
+                speedLock_setWalkSpeed(humanoid, speedLock_currentSpeed)
+            end
+        end))
+
+        table.insert(speedLock_connections, humanoid.StateChanged:Connect(function(_, new)
+            if new == Enum.HumanoidStateType.Ragdoll or new == Enum.HumanoidStateType.FallingDown or new == Enum.HumanoidStateType.Physics or new == Enum.HumanoidStateType.GettingUp or new == Enum.HumanoidStateType.Seated then
+                speedLock_isPaused = true
+                task.delay(1.0, function() speedLock_isPaused = false end)
+            end
+        end))
+        
+        table.insert(speedLock_connections, humanoid:GetPropertyChangedSignal("PlatformStand"):Connect(function() 
+            speedLock_isPaused = humanoid.PlatformStand 
+        end))
+
+        table.insert(speedLock_connections, humanoid.AncestryChanged:Connect(function(_, parent)
+            if not parent then speedLock_disconnectAll() end
+        end))
+
+        if speedLock_isEnforced then
+            if not table.find(speedLock_connections, "heartbeat") then
+                speedLock_lastTick = 0
+                local conn = RunService.Heartbeat:Connect(speedLock_heartbeat)
+                table.insert(speedLock_connections, conn)
+            end
+            if speedLock_canEnforce() then speedLock_setWalkSpeed(humanoid, speedLock_currentSpeed) end
+        else
+            speedLock_applyDisabledState()
+        end
+    end
+    -- [[ AKHIR FUNGSI KUNCI KECEPATAN ]]
+
     local stopSpectate; -- Deklarasi awal
     local cycleSpectate;
     local startSpectate; -- Deklarasi awal
@@ -2349,6 +2769,10 @@ task.spawn(function()
     end
 
     toggleCopyMovement = function(targetPlayer)
+        if not hasPermission("Normal") then
+            showNotification("Tingkatkan ke Normal/VIP untuk menggunakan fitur ini.", Color3.fromRGB(255,100,0))
+            return
+        end
         if isCopyingMovement and copiedPlayer == targetPlayer then
             stopCopyMovement()
         else
@@ -2535,6 +2959,10 @@ task.spawn(function()
     end
     
     ToggleFlingOnPlayer = function(targetPlayer)
+        if not hasPermission("VIP") then
+            showNotification("Silahkan upgrade ke VIP terlebih dahulu, Terimakasih", Color3.fromRGB(255,100,0))
+            return
+        end
         if flingLoopConnection then
             flingLoopConnection:Disconnect()
             flingLoopConnection = nil
@@ -2597,25 +3025,291 @@ task.spawn(function()
         updatePlayerList() 
     end
 
+    local function PlayAnim(id, time, speed)
+        pcall(function()
+            local char = LocalPlayer.Character
+            if not (char and char:FindFirstChild("Animate") and char:FindFirstChildOfClass("Humanoid")) then return end
+            
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
+            
+            -- Stop previous custom animations to prevent overlap
+            for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
+                if track.Name == "CustomFlyAnim" then
+                    track:Stop(0.1)
+                end
+            end
+
+            -- Ensure default animations are off
+            char.Animate.Disabled = true
+
+            local anim = Instance.new("Animation")
+            anim.Name = "CustomFlyAnim" -- Give it a name to identify it later
+            anim.AnimationId = "rbxassetid://" .. tostring(id)
+            
+            local loadanim = humanoid:LoadAnimation(anim)
+            loadanim:Play(0.1)
+            loadanim.Looped = true -- Fly animations should loop
+            
+            -- The time and speed parameters seem to be for setting a specific pose
+            if time then loadanim.TimePosition = time end
+            if speed ~= nil then loadanim:AdjustSpeed(speed) end
+        end)
+    end
+
+    local function StopAnim()
+        local char = LocalPlayer.Character
+        if not (char and char:FindFirstChild("Animate") and char:FindFirstChildOfClass("Humanoid")) then return end
+
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        
+        -- Stop all custom flying animations
+        for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
+            -- A bit more robust check
+            if track.Name == "CustomFlyAnim" or (track.Animation and track.Animation.Name == "CustomFlyAnim") then
+                track:Stop(0.2)
+            end
+        end
+        
+        -- Re-enable default character animations
+        pcall(function()
+            char.Animate.Disabled = false
+        end)
+    end
+
     local function StartFly()
-        if IsFlying then return end; local character = LocalPlayer.Character; if not (character and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChildOfClass("Humanoid")) then return end; local root = character:WaitForChild("HumanoidRootPart"); local humanoid = character:FindFirstChildOfClass("Humanoid"); IsFlying = true; saveFeatureStates(); humanoid.PlatformStand = true; local bodyGyro = Instance.new("BodyGyro", root); bodyGyro.Name = "FlyGyro"; bodyGyro.P = 9e4; bodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9); bodyGyro.CFrame = root.CFrame; local bodyVelocity = Instance.new("BodyVelocity", root); bodyVelocity.Name = "FlyVelocity"; bodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9); bodyVelocity.Velocity = Vector3.new(0, 0, 0); local controls = {F = 0, B = 0, L = 0, R = 0, Q = 0, E = 0}
-        table.insert(FlyConnections, UserInputService.InputBegan:Connect(function(input, processed) if processed then return end; if input.UserInputType == Enum.UserInputType.Keyboard then local key = input.KeyCode.Name:lower(); if key == "w" then controls.F = Settings.FlySpeed elseif key == "s" then controls.B = -Settings.FlySpeed elseif key == "a" then controls.L = -Settings.FlySpeed elseif key == "d" then controls.R = Settings.FlySpeed elseif key == "e" then controls.Q = Settings.FlySpeed * 2 elseif key == "q" then controls.E = -Settings.FlySpeed * 2 end; Workspace.CurrentCamera.CameraType = Enum.CameraType.Track end end))
-        table.insert(FlyConnections, UserInputService.InputEnded:Connect(function(input, processed) if processed then return end; if input.UserInputType == Enum.UserInputType.Keyboard then local key = input.KeyCode.Name:lower(); if key == "w" then controls.F = 0 elseif key == "s" then controls.B = 0 elseif key == "a" then controls.L = 0 elseif key == "d" then controls.R = 0 elseif key == "e" then controls.Q = 0 elseif key == "q" then controls.E = 0 end end end))
-        table.insert(FlyConnections, RunService.RenderStepped:Connect(function() if not IsFlying then return end; local speed = (controls.L + controls.R ~= 0 or controls.F + controls.B ~= 0 or controls.Q + controls.E ~= 0) and 50 or 0; local camera = Workspace.CurrentCamera; if speed ~= 0 then bodyVelocity.Velocity = ((camera.CFrame.LookVector * (controls.F + controls.B)) + ((camera.CFrame * CFrame.new(controls.L + controls.R, (controls.F + controls.B + controls.Q + controls.E) * 0.2, 0).Position) - camera.CFrame.Position)) * speed else bodyVelocity.Velocity = Vector3.new(0, 0, 0) end; bodyGyro.CFrame = camera.CFrame end))
+        if IsFlying then return end
+        local character = LocalPlayer.Character
+        if not (character and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChildOfClass("Humanoid")) then return end
+        
+        local root = character:WaitForChild("HumanoidRootPart")
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        
+        IsFlying = true
+        saveFeatureStates()
+        humanoid.PlatformStand = true
+        
+        local bodyGyro = Instance.new("BodyGyro", root)
+        bodyGyro.Name = "FlyGyro"
+        bodyGyro.P = 9e4
+        bodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+        bodyGyro.CFrame = root.CFrame
+        
+        local bodyVelocity = Instance.new("BodyVelocity", root)
+        bodyVelocity.Name = "FlyVelocity"
+        bodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+        bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+        
+        local controls = {F = 0, B = 0, L = 0, R = 0, Q = 0, E = 0}
+        local currentAnim = "idle" -- Lacak status animasi saat ini
+        
+        -- Animasi idle awal
+        PlayAnim(10714347256, 4, 0)
+
+        table.insert(FlyConnections, UserInputService.InputBegan:Connect(function(input, processed)
+            if processed or not IsFlying then return end
+            if input.UserInputType == Enum.UserInputType.Keyboard then
+                local key = input.KeyCode.Name:lower()
+                if key == "w" then controls.F = 1
+                elseif key == "s" then controls.B = -1
+                elseif key == "a" then controls.L = -1
+                elseif key == "d" then controls.R = 1
+                elseif key == "e" then controls.Q = 1
+                elseif key == "q" then controls.E = -1 end
+            end
+        end))
+        
+        table.insert(FlyConnections, UserInputService.InputEnded:Connect(function(input, processed)
+            if processed or not IsFlying then return end
+            if input.UserInputType == Enum.UserInputType.Keyboard then
+                local key = input.KeyCode.Name:lower()
+                if key == "w" then controls.F = 0
+                elseif key == "s" then controls.B = 0
+                elseif key == "a" then controls.L = 0
+                elseif key == "d" then controls.R = 0
+                elseif key == "e" then controls.Q = 0
+                elseif key == "q" then controls.E = 0 end
+            end
+        end))
+        
+        table.insert(FlyConnections, RunService.RenderStepped:Connect(function()
+            if not IsFlying then return end
+            
+            -- Logika Animasi
+            local newAnim = "idle"
+            if controls.F > 0 then
+                newAnim = "forward"
+            elseif controls.B < 0 then
+                newAnim = "backward"
+            elseif controls.L < 0 then
+                newAnim = "left"
+            elseif controls.R > 0 then
+                newAnim = "right"
+            end
+
+            if newAnim ~= currentAnim then
+                if newAnim == "idle" then
+                    PlayAnim(10714347256, 4, 0) -- Idle
+                elseif newAnim == "forward" then
+                    PlayAnim(10714177846, 4.65, 0) -- Maju
+                elseif newAnim == "backward" then
+                    PlayAnim(10147823318, 4.11, 0) -- Mundur
+                elseif newAnim == "left" then
+                    PlayAnim(10147823318, 3.55, 0) -- Kiri
+                elseif newAnim == "right" then
+                    PlayAnim(10147823318, 4.81, 0) -- Kanan
+                end
+                currentAnim = newAnim
+            end
+
+            -- Logika Gerakan
+            local speed = (controls.L + controls.R ~= 0 or controls.F + controls.B ~= 0 or controls.Q + controls.E ~= 0) and (Settings.FlySpeed * 50) or 0
+            local camera = Workspace.CurrentCamera
+            
+            if speed ~= 0 then
+                local moveVector = Vector3.new(controls.L + controls.R, controls.Q + controls.E, -(controls.F + controls.B))
+                bodyVelocity.Velocity = (camera.CFrame:VectorToWorldSpace(moveVector.Unit)) * speed
+            else
+                bodyVelocity.Velocity = Vector3.new(0, 0.1, 0) -- Sedikit gaya ke atas untuk melawan gravitasi
+            end
+            
+            bodyGyro.CFrame = camera.CFrame
+        end))
     end
 
     local function StopFly()
-        if not IsFlying then return end; IsFlying = false; saveFeatureStates(); local character = LocalPlayer.Character; if character and character:FindFirstChildOfClass("Humanoid") then character.Humanoid.PlatformStand = false end; for _, conn in pairs(FlyConnections) do conn:Disconnect() end; FlyConnections = {}; local root = character and character:FindFirstChild("HumanoidRootPart"); if root then if root:FindFirstChild("FlyGyro") then root.FlyGyro:Destroy() end; if root:FindFirstChild("FlyVelocity") then root.FlyVelocity:Destroy() end end; Workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+        if not IsFlying then return end
+        IsFlying = false
+        saveFeatureStates()
+        
+        StopAnim() -- Stop custom animations and re-enable default ones
+        
+        local character = LocalPlayer.Character
+        if character and character:FindFirstChildOfClass("Humanoid") then
+            character.Humanoid.PlatformStand = false
+        end
+        
+        for _, conn in pairs(FlyConnections) do conn:Disconnect() end
+        FlyConnections = {}
+        
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        if root then
+            if root:FindFirstChild("FlyGyro") then root.FlyGyro:Destroy() end
+            if root:FindFirstChild("FlyVelocity") then root.FlyVelocity:Destroy() end
+        end
+        
+        Workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
     end
 
     local function StopMobileFly()
-        if not IsFlying then return end; IsFlying = false; saveFeatureStates(); local character = LocalPlayer.Character; if character and character:FindFirstChildOfClass("Humanoid") then character.Humanoid.PlatformStand = false end; for _, conn in pairs(FlyConnections) do conn:Disconnect() end; FlyConnections = {}; local root = character and character:FindFirstChild("HumanoidRootPart"); if root then if root:FindFirstChild("FlyGyro") then root.FlyGyro:Destroy() end; if root:FindFirstChild("FlyVelocity") then root.FlyVelocity:Destroy() end end; Workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+        if not IsFlying then return end
+        IsFlying = false
+        saveFeatureStates()
+        
+        StopAnim() -- Stop custom animations
+
+        local character = LocalPlayer.Character
+        if character and character:FindFirstChildOfClass("Humanoid") then
+            character.Humanoid.PlatformStand = false
+        end
+        
+        for _, conn in pairs(FlyConnections) do conn:Disconnect() end
+        FlyConnections = {}
+        
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        if root then
+            if root:FindFirstChild("FlyGyro") then root.FlyGyro:Destroy() end
+            if root:FindFirstChild("FlyVelocity") then root.FlyVelocity:Destroy() end
+        end
+        
+        Workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
     end
 
     local function StartMobileFly()
-        if IsFlying then return end; local character = LocalPlayer.Character; if not (character and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChildOfClass("Humanoid")) then return end; local root = character:WaitForChild("HumanoidRootPart"); local humanoid = character:FindFirstChildOfClass("Humanoid"); local success, controlModule = pcall(require, LocalPlayer.PlayerScripts:WaitForChild("PlayerModule"):WaitForChild("ControlModule")); if not success then showNotification("Gagal memuat modul kontrol mobile.", Color3.fromRGB(255, 100, 100)); return end
-        IsFlying = true; saveFeatureStates(); humanoid.PlatformStand = true; local bodyVelocity = Instance.new("BodyVelocity", root); bodyVelocity.Name = "FlyVelocity"; bodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9); bodyVelocity.Velocity = Vector3.new(0, 0, 0); local bodyGyro = Instance.new("BodyGyro", root); bodyGyro.Name = "FlyGyro"; bodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9); bodyGyro.P = 1000; bodyGyro.D = 50
-        table.insert(FlyConnections, RunService.RenderStepped:Connect(function() if not IsFlying then return end; local camera = Workspace.CurrentCamera; if not (character and root and root:FindFirstChild("FlyVelocity") and root:FindFirstChild("FlyGyro")) then StopMobileFly(); return end; root.FlyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9); root.FlyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9); root.FlyGyro.CFrame = camera.CFrame; root.FlyVelocity.Velocity = Vector3.new(0, 0, 0); local direction = controlModule:GetMoveVector(); if direction.X ~= 0 then root.FlyVelocity.Velocity = root.FlyVelocity.Velocity + camera.CFrame.RightVector * (direction.X * (Settings.FlySpeed * 50)) end; if direction.Z ~= 0 then root.FlyVelocity.Velocity = root.FlyVelocity.Velocity - camera.CFrame.LookVector * (direction.Z * (Settings.FlySpeed * 50)) end end))
+        if IsFlying then return end
+        local character = LocalPlayer.Character
+        if not (character and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChildOfClass("Humanoid")) then return end
+
+        local root = character:WaitForChild("HumanoidRootPart")
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+        local success, controlModule = pcall(require, LocalPlayer.PlayerScripts:WaitForChild("PlayerModule"):WaitForChild("ControlModule"))
+        if not success then
+            showNotification("Gagal memuat modul kontrol mobile.", Color3.fromRGB(255, 100, 100))
+            return
+        end
+
+        IsFlying = true
+        saveFeatureStates()
+        humanoid.PlatformStand = true
+
+        local bodyVelocity = Instance.new("BodyVelocity", root)
+        bodyVelocity.Name = "FlyVelocity"
+        bodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+        bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+
+        local bodyGyro = Instance.new("BodyGyro", root)
+        bodyGyro.Name = "FlyGyro"
+        bodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+        bodyGyro.P = 1000
+        bodyGyro.D = 50
+
+        local currentAnim = "idle"
+        PlayAnim(10714347256, 4, 0) -- Animasi idle awal
+
+        table.insert(FlyConnections, RunService.RenderStepped:Connect(function()
+            if not IsFlying then return end
+
+            local camera = Workspace.CurrentCamera
+            if not (character and root and root:FindFirstChild("FlyVelocity") and root:FindFirstChild("FlyGyro")) then
+                StopMobileFly()
+                return
+            end
+
+            root.FlyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+            root.FlyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+            root.FlyGyro.CFrame = camera.CFrame
+
+            local direction = controlModule:GetMoveVector()
+            local speed = Settings.FlySpeed * 50
+
+            -- Logika Animasi Mobile
+            local newAnim = "idle"
+            if direction.Magnitude > 0.1 then
+                if direction.Z < -0.5 then
+                    newAnim = "forward"
+                elseif direction.Z > 0.5 then
+                    newAnim = "backward"
+                elseif direction.X < -0.5 then
+                    newAnim = "left"
+                elseif direction.X > 0.5 then
+                    newAnim = "right"
+                else
+                    newAnim = "forward" -- Default ke depan jika bergerak diagonal
+                end
+            end
+
+            if newAnim ~= currentAnim then
+                if newAnim == "idle" then
+                    PlayAnim(10714347256, 4, 0) -- Idle
+                elseif newAnim == "forward" then
+                    PlayAnim(10714177846, 4.65, 0) -- Maju
+                elseif newAnim == "backward" then
+                    PlayAnim(10147823318, 4.11, 0) -- Mundur
+                elseif newAnim == "left" then
+                    PlayAnim(10147823318, 3.55, 0) -- Kiri
+                elseif newAnim == "right" then
+                    PlayAnim(10147823318, 4.81, 0) -- Kanan
+                end
+                currentAnim = newAnim
+            end
+
+            -- Logika Gerakan Mobile
+            if direction.Magnitude > 0.1 then
+                root.FlyVelocity.Velocity = (camera.CFrame.RightVector * direction.X + camera.CFrame.LookVector * -direction.Z) * speed
+            else
+                root.FlyVelocity.Velocity = Vector3.new(0, 0.1, 0) -- Melawan gravitasi
+            end
+        end))
     end
 
     local function ToggleNoclip(enabled)
@@ -2638,6 +3332,10 @@ task.spawn(function()
     end
 
     local function CreateTouchFlingGUI()
+        if not hasPermission("VIP") then
+            showNotification("Silahkan upgrade ke VIP terlebih dahulu, Terimakasih", Color3.fromRGB(255,100,0))
+            return
+        end
         if touchFlingGui and touchFlingGui.Parent then return end; local FlingScreenGui = Instance.new("ScreenGui"); FlingScreenGui.Name = "ArexansTouchFlingGUI"; FlingScreenGui.Parent = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui"); FlingScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling; FlingScreenGui.ResetOnSpawn = false; touchFlingGui = FlingScreenGui
         local Frame = Instance.new("Frame", FlingScreenGui); Frame.BackgroundColor3 = Color3.fromRGB(170, 200, 255); Frame.BackgroundTransparency = 0.3; Frame.BorderSizePixel = 0; 
         Frame.Position = UDim2.new(0.5, -45, 0, 20); 
@@ -2767,6 +3465,572 @@ task.spawn(function()
     local function ToggleAntiFling(enabled)
         antifling_enabled = enabled; saveFeatureStates(); if enabled and not antifling_connection then antifling_connection = RunService.Heartbeat:Connect(protect_character) elseif not enabled and antifling_connection then antifling_connection:Disconnect(); antifling_connection = nil end
     end
+
+    local function ToggleAntiAFK(enabled)
+        IsAntiAFKEnabled = enabled
+        saveFeatureStates()
+        if enabled then
+            if not antiAFKConnection then
+                antiAFKConnection = ConnectEvent(LocalPlayer.Idled, function()
+                    local VirtualUser = game:GetService("VirtualUser")
+                    VirtualUser:CaptureController()
+                    VirtualUser:ClickButton2(Vector2.new())
+                end)
+            end
+        else
+            if antiAFKConnection then
+                antiAFKConnection:Disconnect()
+                antiAFKConnection = nil
+            end
+        end
+    end
+
+    -- [[ AWAL INTEGRASI FUNGSI MAGNET.LUA ]]
+    local stopMagnet, playMagnet, scanForParts, createMagnetGUI
+
+    stopMagnet = function()
+        if not isMagnetActive then return end
+        isMagnetActive = false
+        if magnetConnection then magnetConnection:Disconnect(); magnetConnection = nil end
+        
+        task.spawn(function()
+            for _, part in ipairs(scannedParts) do
+                if part and part.Parent and part:IsA("BasePart") then
+                    part.AssemblyLinearVelocity = Vector3.zero
+                    pcall(function() part:SetNetworkOwner(nil) end)
+                end
+            end
+        end)
+    end
+
+    scanForParts = function(rangeBox, statusLabel)
+        local rangeValue = tonumber(rangeBox.Text)
+        if not rangeValue or rangeValue <= 0 then showNotification("Range tidak valid!", Color3.fromRGB(255, 100, 100)); return end
+        
+        stopMagnet()
+        scannedParts = {}
+        partGoals = {}
+        
+        showNotification("Mencari objek...", Color3.fromRGB(220, 220, 220))
+        task.wait(0.1)
+        local character = LocalPlayer.Character
+        if not character or not character:FindFirstChild("HumanoidRootPart") then showNotification("Karakter tidak ditemukan!", Color3.fromRGB(255, 100, 100)); return end
+        
+        scanCenterPosition = character.HumanoidRootPart.Position
+        
+        local partsInWorkspace = Workspace:GetPartBoundsInRadius(scanCenterPosition, rangeValue)
+        for _, part in ipairs(partsInWorkspace) do
+            if part:IsA("BasePart") and not part.Anchored and not character:IsAncestorOf(part) then
+                pcall(function() part:SetNetworkOwner(LocalPlayer) end)
+                table.insert(scannedParts, part)
+            end
+        end
+        local count = #scannedParts
+        showNotification("Scan Selesai: " .. count .. " objek ditemukan.", Color3.fromRGB(100, 255, 100))
+        if statusLabel then
+            statusLabel.Text = "Parts: " .. count
+            statusLabel.TextColor3 = Color3.fromRGB(120, 255, 120)
+        end
+    end
+
+    playMagnet = function(powerBox)
+        if isMagnetActive then return false end
+        local powerValue = tonumber(powerBox.Text)
+        if not powerValue or powerValue <= 0 then showNotification("Power tidak valid!", Color3.fromRGB(255, 100, 100)); return false end
+        magnetPower = powerValue
+        if #scannedParts == 0 then showNotification("Tidak ada objek hasil scan. Scan dulu!", Color3.fromRGB(255, 200, 100)); return false end
+        isMagnetActive = true
+
+        magnetConnection = RunService.Heartbeat:Connect(function(deltaTime)
+            if not isMagnetActive then
+                if magnetConnection then magnetConnection:Disconnect(); magnetConnection = nil end
+                return
+            end
+            local character = LocalPlayer.Character
+            local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+            if not rootPart then stopMagnet(); return end
+            
+            local forceMultiplier = magnetPower * 2500 * deltaTime
+
+            for i = #scannedParts, 1, -1 do
+                local part = scannedParts[i]
+                if part and part.Parent then
+                    local targetPosition
+                    
+                    if magnetMode == "random_free" then
+                        local goal = partGoals[part]
+                        local distanceToGoal = goal and (part.Position - goal).Magnitude or 100
+                        
+                        if not goal or distanceToGoal < 15 then
+                            local randomOffset = Vector3.new(math.random(-magnetRange, magnetRange), math.random(5, 50), math.random(-magnetRange, magnetRange))
+                            partGoals[part] = scanCenterPosition + randomOffset
+                        end
+                        targetPosition = partGoals[part]
+                    else -- Mode "target_player"
+                        targetPosition = rootPart.Position
+                    end
+
+                    local direction = (targetPosition - part.Position)
+                    local distance = direction.Magnitude
+                    if distance < 1 then distance = 1 end
+                    
+                    local velocity = direction.Unit * forceMultiplier * (1 / distance)
+                    part.AssemblyLinearVelocity = velocity
+                else
+                    table.remove(scannedParts, i)
+                end
+            end
+        end)
+        return true
+    end
+
+    createMagnetGUI = function()
+        if not hasPermission("VIP") then
+            showNotification("Silahkan upgrade ke VIP terlebih dahulu, Terimakasih", Color3.fromRGB(255,100,0))
+            return
+        end
+        if MagnetGUI and MagnetGUI.Parent then
+            MagnetGUI:Destroy()
+        end
+        MagnetGUI = Instance.new("ScreenGui", CoreGui)
+        MagnetGUI.Name = "MagnetGUI"
+        MagnetGUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        MagnetGUI.ResetOnSpawn = false
+
+        local MainFrame = Instance.new("Frame", MagnetGUI)
+        MainFrame.Name = "MainFrame"
+        MainFrame.Size = UDim2.new(0, 180, 0, 95)
+        MainFrame.Position = UDim2.new(0.1, 0, 0.5, -55)
+        MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+        MainFrame.BackgroundTransparency = 0.5
+        local MainUICorner = Instance.new("UICorner", MainFrame); MainUICorner.CornerRadius = UDim.new(0, 8)
+        local UIStroke = Instance.new("UIStroke", MainFrame); UIStroke.Color = Color3.fromRGB(0, 150, 255); UIStroke.Thickness = 1.5
+
+        local TitleBar = Instance.new("TextButton", MainFrame)
+        TitleBar.Name = "TitleBar"; TitleBar.Size = UDim2.new(1, 0, 0, 25)
+        TitleBar.BackgroundColor3 = Color3.fromRGB(25, 25, 25); TitleBar.Text = ""
+        local TitleBarCorner = Instance.new("UICorner", TitleBar); TitleBarCorner.CornerRadius = UDim.new(0, 8)
+        TitleBar.AutoButtonColor = false
+        MakeDraggable(MainFrame, TitleBar, function() return true end, nil)
+
+        local TitleLabel = Instance.new("TextLabel", TitleBar)
+        TitleLabel.Size = UDim2.new(0.4, 0, 1, 0); TitleLabel.Position = UDim2.new(0, 8, 0, 0)
+        TitleLabel.BackgroundTransparency = 1; TitleLabel.Text = "Magnet"
+        TitleLabel.TextColor3 = Color3.fromRGB(0, 200, 255); TitleLabel.TextSize = 12
+        TitleLabel.Font = Enum.Font.SourceSansBold; TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+        local statusLabel = Instance.new("TextLabel", TitleBar)
+        statusLabel.Size = UDim2.new(0.5, 0, 1, 0); statusLabel.Position = UDim2.new(0.3, 0, 0, 0)
+        statusLabel.BackgroundTransparency = 1; statusLabel.Text = "Parts: " .. #scannedParts
+        statusLabel.TextColor3 = Color3.fromRGB(180, 180, 180); statusLabel.TextSize = 10
+        statusLabel.Font = Enum.Font.SourceSans; statusLabel.TextXAlignment = Enum.TextXAlignment.Center
+        
+        local closeBtn = Instance.new("TextButton",TitleBar)
+        closeBtn.Size = UDim2.new(0,18,0,18); closeBtn.Position = UDim2.new(1,-22,0.5,-9); closeBtn.BackgroundTransparency = 1; closeBtn.Font = Enum.Font.SourceSansBold; closeBtn.Text = "X"; closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255); closeBtn.TextSize = 16
+
+        local minimizeBtn = Instance.new("TextButton", TitleBar)
+        minimizeBtn.Size = UDim2.new(0, 18, 0, 18); minimizeBtn.Position = UDim2.new(1, -42, 0.5, -9); minimizeBtn.BackgroundTransparency = 1; minimizeBtn.Font = Enum.Font.SourceSansBold; minimizeBtn.Text = "-"; minimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255); minimizeBtn.TextSize = 20
+
+        local ContentFrame = Instance.new("Frame", MainFrame)
+        ContentFrame.Name = "ContentFrame"; ContentFrame.ClipsDescendants = true
+        ContentFrame.Size = UDim2.new(1, -10, 1, -30)
+        ContentFrame.Position = UDim2.new(0, 5, 0, 25)
+        ContentFrame.BackgroundTransparency = 1
+        local ContentLayout = Instance.new("UIListLayout", ContentFrame); ContentLayout.Padding = UDim.new(0, 4)
+
+        local function createIconButton(parent, text, size, callback)
+            local btn = Instance.new("TextButton", parent)
+            btn.Size = UDim2.new(0, size, 0, 24); btn.Text = text
+            btn.Font = Enum.Font.SourceSansBold; btn.TextSize = 16
+            btn.TextColor3 = Color3.new(1, 1, 1)
+            local corner = Instance.new("UICorner", btn); corner.CornerRadius = UDim.new(0, 5)
+            if callback then btn.MouseButton1Click:Connect(callback) end
+            return btn
+        end
+        
+        local function createCompactTextBox(parent, name, defaultValue)
+            local frame = Instance.new("Frame", parent)
+            frame.BackgroundTransparency = 1; frame.Size = UDim2.new(0, 55, 0, 24)
+            
+            local label = Instance.new("TextLabel", frame)
+            label.Size = UDim2.new(1, 0, 0, 12); label.BackgroundTransparency = 1; label.Font = Enum.Font.SourceSans
+            label.Text = name; label.TextColor3 = Color3.fromRGB(200, 200, 200); label.TextSize = 10
+            label.TextXAlignment = Enum.TextXAlignment.Center
+            
+            local textBox = Instance.new("TextBox", frame)
+            textBox.Size = UDim2.new(1, 0, 1, -12); textBox.Position = UDim2.new(0, 0, 0, 12)
+            textBox.BackgroundColor3 = Color3.fromRGB(35, 35, 35); textBox.TextColor3 = Color3.fromRGB(220, 220, 220)
+            textBox.Text = tostring(defaultValue); textBox.Font = Enum.Font.SourceSans; textBox.TextSize = 11
+            textBox.TextXAlignment = Enum.TextXAlignment.Center
+            local corner = Instance.new("UICorner", textBox); corner.CornerRadius = UDim.new(0, 4)
+            
+            return frame, textBox 
+        end
+
+        local controlsRow = Instance.new("Frame", ContentFrame)
+        controlsRow.BackgroundTransparency = 1; controlsRow.Size = UDim2.new(1, 0, 0, 28)
+
+        local rangeFrame, rangeTextBox = createCompactTextBox(controlsRow, "Range", magnetRange)
+        rangeFrame.Position = UDim2.new(0, 0, 0.5, -12)
+
+        local powerFrame, powerTextBox = createCompactTextBox(controlsRow, "Power", magnetPower)
+        powerFrame.Position = UDim2.new(0, 70, 0.5, -12)
+
+        local scanButton = createIconButton(controlsRow, "📡", 30, function() scanForParts(rangeTextBox, statusLabel) end)
+        scanButton.BackgroundColor3 = Color3.fromRGB(50, 150, 255)
+        scanButton.Position = UDim2.new(0, 140, 0.5, -12) 
+
+        local modeRow = Instance.new("Frame", ContentFrame)
+        modeRow.BackgroundTransparency = 1; modeRow.Size = UDim2.new(1, 0, 0, 28)
+
+        local MODES = { {Name = "Ke Karakter", ID = "target_player"}, {Name = "Acak", ID = "random_free"} }
+        local currentModeIndex = 1
+
+        local prevBtn = createIconButton(modeRow, "<", 25)
+        prevBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+        prevBtn.Position = UDim2.new(0, 0, 0.5, -12)
+
+        local nextBtn = createIconButton(modeRow, ">", 25)
+        nextBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+        nextBtn.Position = UDim2.new(0, 95, 0.5, -12)
+
+        local modeLabel = Instance.new("TextLabel", modeRow)
+        modeLabel.Size = UDim2.new(0, 70, 1, 0); 
+        modeLabel.Position = UDim2.new(0, 25, 0, 0)
+        modeLabel.BackgroundTransparency = 1; modeLabel.Font = Enum.Font.SourceSansBold
+        modeLabel.TextSize = 10; modeLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+        modeLabel.TextWrapped = true; modeLabel.TextXAlignment = Enum.TextXAlignment.Center
+        
+        local toggleButton = createIconButton(modeRow, "▶️", 30)
+        toggleButton.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
+        toggleButton.Position = UDim2.new(1, -30, 0.5, -12)
+        
+        local function updateModeDisplay()
+            local currentModeData = MODES[currentModeIndex]
+            magnetMode = currentModeData.ID
+            modeLabel.Text = currentModeData.Name
+        end
+        
+        prevBtn.MouseButton1Click:Connect(function()
+            currentModeIndex = currentModeIndex - 1
+            if currentModeIndex < 1 then currentModeIndex = #MODES end
+            updateModeDisplay()
+        end)
+        
+        nextBtn.MouseButton1Click:Connect(function()
+            currentModeIndex = currentModeIndex + 1
+            if currentModeIndex > #MODES then currentModeIndex = 1 end
+            updateModeDisplay()
+        end)
+        
+        updateModeDisplay()
+
+        toggleButton.MouseButton1Click:Connect(function()
+            if isMagnetActive then
+                stopMagnet(); toggleButton.Text = "▶️"; toggleButton.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
+            else
+                if playMagnet(powerTextBox) then toggleButton.Text = "⏹️"; toggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50) end
+            end
+        end)
+        
+        closeBtn.MouseButton1Click:Connect(function() if isMagnetActive then stopMagnet() end; MagnetGUI:Destroy() end)
+        
+        local isMinimized = false; 
+        local originalSize = MainFrame.Size
+        local minimizedSize = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, TitleBar.Size.Y.Offset)
+        
+        minimizeBtn.MouseButton1Click:Connect(function()
+            isMinimized = not isMinimized
+            ContentFrame.Visible = not isMinimized
+            local targetSize = isMinimized and minimizedSize or originalSize
+            TweenService:Create(MainFrame, TweenInfo.new(0.2), {Size = targetSize}):Play()
+        end)
+    end
+    -- [[ AKHIR INTEGRASI FUNGSI MAGNET.LUA ]]
+
+    -- [[ AWAL INTEGRASI FUNGSI PARTCONTROLLER.LUA ]]
+    local pc_modes = {}
+    local startPartController, stopPartController, createPartControllerGUI, pc_fullRestore
+
+    local function pc_getPos() return LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character.HumanoidRootPart.Position end
+    local function pc_getLook() return LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character.HumanoidRootPart.CFrame.LookVector or Vector3.new(0,0,-1) end
+
+    local function pc_cleanBodyPositions()
+        for _, bp in pairs(pc_state.bodyPositions) do
+            if bp and bp.Parent then bp:Destroy() end
+        end
+        pc_state.bodyPositions = {}
+    end
+    
+    local function pc_force(part, targetPos)
+        if not part or not part.Parent then return end
+        pcall(function()
+            part.Anchored = false
+            part.CanCollide = false
+            for _, child in pairs(part:GetChildren()) do if child:IsA("BodyPosition") or child:IsA("BodyVelocity") or child:IsA("BodyGyro") then child:Destroy() end end
+            local bp = Instance.new("BodyPosition")
+            bp.MaxForce = Vector3.new(pc_config.magnetForce, pc_config.magnetForce, pc_config.magnetForce)
+            bp.Position = targetPos; bp.P = 10000; bp.D = 500; bp.Parent = part
+            table.insert(pc_state.bodyPositions, bp)
+        end)
+    end
+
+    pc_modes.bring = function() local p=pc_getPos() if not p then return end for i,pt in pairs(pc_state.parts) do if pt and pt.Parent then local o=Vector3.new(math.random(-15,15),math.random(10,30),math.random(-15,15)) pc_force(pt,p+o) end end end
+    pc_modes.ring = function() local p=pc_getPos() if not p then return end local t=tick()*pc_config.speed*0.5 for i,pt in pairs(pc_state.parts) do if pt and pt.Parent then local a=((i/#pc_state.parts)*math.pi*2)+t local r=8 local o=Vector3.new(math.cos(a)*r,5,math.sin(a)*r) pc_force(pt,p+o) end end end
+    pc_modes.tornado = function() local p=pc_getPos() if not p then return end local t=tick()*pc_config.speed for i,pt in pairs(pc_state.parts) do if pt and pt.Parent then local h=((i-1)%10)*4 local r=5+(h/8) local a=t+(i*0.5) local o=Vector3.new(math.cos(a)*r,h,math.sin(a)*r) pc_force(pt,p+o) end end end
+    pc_modes.blackhole = function() local p=pc_getPos() if not p then return end local c=p+Vector3.new(0,10,0) local t=tick()*pc_config.speed for i,pt in pairs(pc_state.parts) do if pt and pt.Parent then local a=(i*0.5)+(t*0.3) local r=3 local o=Vector3.new(math.cos(a)*r,math.sin(t+i*0.2)*2,math.sin(a)*r) pc_force(pt,c+o) end end end
+    pc_modes.orbit = function() local p=pc_getPos() if not p then return end local c=p+Vector3.new(0,8,0) local t=tick()*pc_config.speed*0.3 for i,pt in pairs(pc_state.parts) do if pt and pt.Parent then local r=10+((i%3)*3) local a=t+(i*0.8) local o=Vector3.new(math.cos(a)*r,math.sin(a*0.5)*4,math.sin(a)*r) pc_force(pt,c+o) end end end
+    pc_modes.spiral = function() local p=pc_getPos() if not p then return end local t=tick()*pc_config.speed*0.5 for i,pt in pairs(pc_state.parts) do if pt and pt.Parent then local h=p.Y+(i*1)+(t%15) local a=(i*0.5)+t local r=8 pc_force(pt,Vector3.new(p.X+math.cos(a)*r,h,p.Z+math.sin(a)*r)) end end end
+    pc_modes.wave = function() local p=pc_getPos() if not p then return end local t=tick()*pc_config.speed for i,pt in pairs(pc_state.parts) do if pt and pt.Parent then local h=p.Y+8+math.sin(t+i*0.5)*5 pc_force(pt,Vector3.new(p.X+((i%10)*3)-15,h,p.Z+math.cos(t+i*0.3)*5)) end end end
+    pc_modes.fountain = function() local p=pc_getPos() if not p then return end local t=tick()*pc_config.speed for i,pt in pairs(pc_state.parts) do if pt and pt.Parent then local a=(i/#pc_state.parts)*math.pi*2 local h=p.Y+3+math.abs(math.sin(t+i*0.5))*12 local r=4 pc_force(pt,Vector3.new(p.X+math.cos(a)*r,h,p.Z+math.sin(a)*r)) end end end
+    pc_modes.shield = function() local p=pc_getPos() if not p then return end local t=tick()*pc_config.speed for i,pt in pairs(pc_state.parts) do if pt and pt.Parent then local a=((i/#pc_state.parts)*math.pi*2)+t local r=8 pc_force(pt,Vector3.new(p.X+math.cos(a)*r,p.Y+2,p.Z+math.sin(a)*r)) end end end
+    pc_modes.sphere = function() local p=pc_getPos() if not p then return end local c=p+Vector3.new(0,10,0) for i,pt in pairs(pc_state.parts) do if pt and pt.Parent then local phi=math.acos(-1+(2*i)/#pc_state.parts) local theta=math.sqrt(#pc_state.parts*math.pi)*phi local r=10 local o=Vector3.new(r*math.cos(theta)*math.sin(phi),r*math.cos(phi),r*math.sin(theta)*math.sin(phi)) pc_force(pt,c+o) end end end
+    pc_modes.launch = function() local p=pc_getPos() if not p then return end local l=pc_getLook() for i=1,math.min(5,#pc_state.parts) do local idx=((pc_state.timeOffset+i-1)%#pc_state.parts)+1 local pt=pc_state.parts[idx] if pt and pt.Parent then pcall(function() pt:BreakJoints() for _,c in pairs(pt:GetChildren()) do if c:IsA("BodyVelocity") then c:Destroy() end end local bv=Instance.new("BodyVelocity") bv.MaxForce=Vector3.new(math.huge,math.huge,math.huge) bv.Velocity=l*pc_config.launchSpeed+Vector3.new(math.random(-10,10),math.random(0,20),math.random(-10,10)) bv.Parent=pt task.delay(2,function() if bv and bv.Parent then bv:Destroy() end end) end) end end end
+    pc_modes.explosion=pc_modes.launch; pc_modes.galaxy=pc_modes.ring; pc_modes.dna=pc_modes.spiral; pc_modes.supernova=pc_modes.blackhole; pc_modes.matrix=pc_modes.bring; pc_modes.vortex=pc_modes.tornado; pc_modes.meteor=pc_modes.launch; pc_modes.portal=pc_modes.ring; pc_modes.dragon=pc_modes.spiral; pc_modes.infinity=pc_modes.wave; pc_modes.tsunami=pc_modes.wave; pc_modes.solar=pc_modes.orbit; pc_modes.quantum=pc_modes.bring
+
+    local pc_temporaryStorage = nil
+
+    local function pc_clearAndStoreConstraints()
+        if not pc_temporaryStorage then showNotification("Penyimpanan sementara tidak ditemukan!", Color3.fromRGB(200,50,50)) return 0 end
+        
+        local storedCount = 0
+        for _, obj in pairs(Workspace:GetDescendants()) do
+            if obj:IsA("RopeConstraint") or obj:IsA("WeldConstraint") or obj:IsA("Weld") or (obj:IsA("Attachment") and not obj.Parent:FindFirstChildOfClass("Humanoid")) then
+                pcall(function()
+                    local isStored = false
+                    for _, entry in pairs(pc_state.removedItems) do if entry.item == obj then isStored = true break end end
+                    
+                    if not isStored then
+                        table.insert(pc_state.removedItems, {item = obj, parent = obj.Parent})
+                        obj.Parent = pc_temporaryStorage
+                        storedCount = storedCount + 1
+                    end
+                end)
+            end
+        end
+        return storedCount
+    end
+
+    local function pc_scan()
+        pc_state.parts = {}
+        pc_cleanBodyPositions()
+        local p = pc_getPos()
+        if not p then showNotification("Posisi pemain tidak ditemukan", Color3.fromRGB(200,50,50)) return {} end
+        
+        local scanned = 0
+        for _, obj in pairs(Workspace:GetDescendants()) do
+            if scanned >= pc_config.partLimit then break end
+            if obj:IsA("BasePart") and not (LocalPlayer.Character and obj:IsDescendantOf(LocalPlayer.Character)) then
+                if (obj.Position - p).Magnitude <= pc_config.radius then
+                    pcall(function()
+                        if not pc_state.originalProperties[obj] then
+                            pc_state.originalProperties[obj] = {Anchored = obj.Anchored, CanCollide = obj.CanCollide}
+                        end
+                        
+                        for _, c in pairs(obj:GetChildren()) do
+                            if c:IsA("Constraint") or c:IsA("Weld") or c:IsA("Attachment") then
+                                local isStored = false
+                                for _, entry in pairs(pc_state.removedItems) do if entry.item == c then isStored = true break end end
+                                if not isStored and pc_temporaryStorage then
+                                    table.insert(pc_state.removedItems, {item = c, parent = c.Parent})
+                                    c.Parent = pc_temporaryStorage
+                                end
+                            end
+                        end
+                        
+                        obj.Anchored = false
+                        obj.CanCollide = false
+                        table.insert(pc_state.parts, obj)
+                        scanned = scanned + 1
+                    end)
+                end
+            end
+        end
+        return pc_state.parts
+    end
+
+    stopPartController = function()
+        if pc_state.connection then pc_state.connection:Disconnect(); pc_state.connection=nil end
+        pc_state.active = false
+        pc_cleanBodyPositions()
+        if PartControllerGUI then
+             local toggleButton = PartControllerGUI:FindFirstChild("toggleButton", true)
+             if toggleButton then
+                toggleButton.Text = "▶️"
+                toggleButton.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
+             end
+        end
+    end
+
+    startPartController = function()
+        if pc_state.active then return end
+        if #pc_state.parts == 0 then pc_scan() end
+        if #pc_state.parts == 0 then showNotification("Tidak bisa mulai - tidak ada part!", Color3.fromRGB(200,50,50)); return end
+        
+        pc_state.active = true
+        pc_state.timeOffset = 0
+        pc_state.connection = RunService.Heartbeat:Connect(function()
+            if not pc_state.active then return end
+            pc_state.timeOffset = (pc_state.timeOffset + pc_config.batchSize) % #pc_state.parts
+            local fn = pc_modes[pc_state.mode]
+            if fn then pcall(fn) end
+        end)
+        if PartControllerGUI then
+             local toggleButton = PartControllerGUI:FindFirstChild("toggleButton", true)
+             if toggleButton then
+                toggleButton.Text = "⏹️"
+                toggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+             end
+        end
+    end
+
+    pc_fullRestore = function()
+        stopPartController()
+
+        for _, entry in pairs(pc_state.removedItems) do
+            if entry.item and entry.parent and entry.parent.Parent then
+                pcall(function() entry.item.Parent = entry.parent end)
+            end
+        end
+
+        for part, properties in pairs(pc_state.originalProperties) do
+            if part and part.Parent then
+                pcall(function()
+                    part.Anchored = properties.Anchored
+                    part.CanCollide = properties.CanCollide
+                end)
+            end
+        end
+
+        pc_state.parts = {}
+        pc_state.originalProperties = {}
+        pc_state.removedItems = {}
+        if PartControllerGUI then
+            local statusLabel = PartControllerGUI:FindFirstChild("statusLabel", true)
+            if statusLabel then statusLabel.Text = "Parts: 0" end
+        end
+    end
+
+    createPartControllerGUI = function()
+        if not hasPermission("VIP") then
+            showNotification("Silahkan upgrade ke VIP terlebih dahulu, Terimakasih", Color3.fromRGB(255,100,0))
+            return
+        end
+        if PartControllerGUI and PartControllerGUI.Parent then PartControllerGUI:Destroy() end
+        PartControllerGUI = Instance.new("ScreenGui", CoreGui); PartControllerGUI.Name = "ArexansPartControllerGUI"; PartControllerGUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling; PartControllerGUI.ResetOnSpawn = false
+        
+        pc_temporaryStorage = Instance.new("Folder", PartControllerGUI); pc_temporaryStorage.Name = "TemporaryStorage"
+
+        local MainFrame = Instance.new("Frame", PartControllerGUI)
+        MainFrame.Name = "MainFrame"
+        MainFrame.Size = UDim2.new(0, 180, 0, 95)
+        MainFrame.Position = UDim2.new(0.5, -90, 0.5, -47)
+        MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+        MainFrame.BackgroundTransparency = 0.5
+        local MainUICorner = Instance.new("UICorner", MainFrame); MainUICorner.CornerRadius = UDim.new(0, 8)
+        local UIStroke = Instance.new("UIStroke", MainFrame); UIStroke.Color = Color3.fromRGB(0, 150, 255); UIStroke.Thickness = 1.5
+
+        local TitleBar = Instance.new("TextButton", MainFrame)
+        TitleBar.Name = "TitleBar"; TitleBar.Size = UDim2.new(1, 0, 0, 25)
+        TitleBar.BackgroundColor3 = Color3.fromRGB(25, 25, 25); TitleBar.Text = ""
+        local TitleBarCorner = Instance.new("UICorner", TitleBar); TitleBarCorner.CornerRadius = UDim.new(0, 8)
+        TitleBar.AutoButtonColor = false
+        MakeDraggable(MainFrame, TitleBar, function() return true end, nil)
+
+        local TitleLabel = Instance.new("TextLabel", TitleBar)
+        TitleLabel.Size = UDim2.new(0.4, 0, 1, 0); TitleLabel.Position = UDim2.new(0, 8, 0, 0)
+        TitleLabel.BackgroundTransparency = 1; TitleLabel.Text = "P-Controller"
+        TitleLabel.TextColor3 = Color3.fromRGB(0, 200, 255); TitleLabel.TextSize = 12
+        TitleLabel.Font = Enum.Font.SourceSansBold; TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+        local statusLabel = Instance.new("TextLabel", TitleBar)
+        statusLabel.Name = "statusLabel"
+        statusLabel.Size = UDim2.new(0.5, 0, 1, 0); statusLabel.Position = UDim2.new(0.3, 0, 0, 0)
+        statusLabel.BackgroundTransparency = 1; statusLabel.Text = "Parts: " .. #pc_state.parts
+        statusLabel.TextColor3 = Color3.fromRGB(180, 180, 180); statusLabel.TextSize = 10
+        statusLabel.Font = Enum.Font.SourceSans; statusLabel.TextXAlignment = Enum.TextXAlignment.Center
+        
+        local closeBtn = Instance.new("TextButton",TitleBar)
+        closeBtn.Size = UDim2.new(0,18,0,18); closeBtn.Position = UDim2.new(1,-22,0.5,-9); closeBtn.BackgroundTransparency = 1; closeBtn.Font = Enum.Font.SourceSansBold; closeBtn.Text = "X"; closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255); closeBtn.TextSize = 16
+
+        local minimizeBtn = Instance.new("TextButton", TitleBar)
+        minimizeBtn.Size = UDim2.new(0, 18, 0, 18); minimizeBtn.Position = UDim2.new(1, -42, 0.5, -9); minimizeBtn.BackgroundTransparency = 1; minimizeBtn.Font = Enum.Font.SourceSansBold; minimizeBtn.Text = "-"; minimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255); minimizeBtn.TextSize = 20
+
+        local ContentFrame = Instance.new("Frame", MainFrame)
+        ContentFrame.Name = "ContentFrame"; ContentFrame.ClipsDescendants = true
+        ContentFrame.Size = UDim2.new(1, -10, 1, -30)
+        ContentFrame.Position = UDim2.new(0, 5, 0, 25)
+        ContentFrame.BackgroundTransparency = 1
+        local ContentLayout = Instance.new("UIListLayout", ContentFrame); ContentLayout.Padding = UDim.new(0, 4)
+
+        local function createIconButton(parent, text, size, callback)
+            local btn = Instance.new("TextButton", parent); btn.Size = UDim2.new(0, size, 0, 24); btn.Text = text
+            btn.Font = Enum.Font.SourceSansBold; btn.TextSize = 16; btn.TextColor3 = Color3.new(1, 1, 1)
+            local corner = Instance.new("UICorner", btn); corner.CornerRadius = UDim.new(0, 5)
+            if callback then btn.MouseButton1Click:Connect(callback) end
+            return btn
+        end
+        
+        local function createCompactTextBox(parent, name, defaultValue, callback)
+            local frame = Instance.new("Frame", parent); frame.BackgroundTransparency = 1; frame.Size = UDim2.new(0, 48, 0, 24)
+            local label = Instance.new("TextLabel", frame); label.Size = UDim2.new(1, 0, 0, 12); label.BackgroundTransparency = 1; label.Font = Enum.Font.SourceSans
+            label.Text = name; label.TextColor3 = Color3.fromRGB(200, 200, 200); label.TextSize = 10; label.TextXAlignment = Enum.TextXAlignment.Center
+            local textBox = Instance.new("TextBox", frame); textBox.Size = UDim2.new(1, 0, 1, -12); textBox.Position = UDim2.new(0, 0, 0, 12)
+            textBox.BackgroundColor3 = Color3.fromRGB(35, 35, 35); textBox.TextColor3 = Color3.fromRGB(220, 220, 220); textBox.Text = tostring(defaultValue); textBox.Font = Enum.Font.SourceSans; textBox.TextSize = 11
+            textBox.TextXAlignment = Enum.TextXAlignment.Center; textBox.ClearTextOnFocus = false
+            local corner = Instance.new("UICorner", textBox); corner.CornerRadius = UDim.new(0, 4)
+            textBox.FocusLost:Connect(function(enterPressed) local num = tonumber(textBox.Text) if num and callback then callback(num) else textBox.Text = tostring(defaultValue) end end)
+            return frame, textBox 
+        end
+
+        local controlsRow = Instance.new("Frame", ContentFrame)
+        controlsRow.BackgroundTransparency = 1; controlsRow.Size = UDim2.new(1, 0, 0, 28)
+        local radiusFrame, radiusBox = createCompactTextBox(controlsRow, "Radius", pc_config.radius, function(v) pc_config.radius = v end); radiusFrame.Position = UDim2.new(0, 0, 0.5, -12)
+        local speedFrame, speedBox = createCompactTextBox(controlsRow, "Speed", pc_config.speed, function(v) pc_config.speed = v; pc_config.launchSpeed = v * 20 end); speedFrame.Position = UDim2.new(0, 52, 0.5, -12)
+        
+        local destroyBtn = createIconButton(controlsRow, "🚯", 30, function()
+            destroyBtn.Text = "..."
+            task.spawn(function()
+                local n = pc_clearAndStoreConstraints(); destroyBtn.Text = "🚯"; statusLabel.Text = "Stored "..n; statusLabel.TextColor3 = Color3.fromRGB(255, 120, 120)
+                task.wait(2); statusLabel.Text = "Parts: "..#pc_state.parts; statusLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+            end)
+        end)
+        destroyBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40); destroyBtn.Position = UDim2.new(0, 104, 0.5, -12) 
+        
+        local isScanning = false
+        local scanButton = createIconButton(controlsRow, "🔍", 30, function()
+            if isScanning then return end; isScanning = true; statusLabel.Text = "Scanning..."; statusLabel.TextColor3 = Color3.fromRGB(255, 180, 80)
+            task.spawn(function()
+                task.wait(); local foundParts = pc_scan(); statusLabel.Text = "Parts: " .. #foundParts; statusLabel.TextColor3 = Color3.fromRGB(120, 255, 120); isScanning = false
+            end)
+        end)
+        scanButton.BackgroundColor3 = Color3.fromRGB(50, 150, 255); scanButton.Position = UDim2.new(0, 138, 0.5, -12)
+
+        local modeRow = Instance.new("Frame", ContentFrame); modeRow.BackgroundTransparency = 1; modeRow.Size = UDim2.new(1, 0, 0, 28)
+        local prevBtn = createIconButton(modeRow, "<", 25); prevBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60); prevBtn.Position = UDim2.new(0, 0, 0.5, -12)
+        local modeLabel = Instance.new("TextLabel", modeRow); modeLabel.Size = UDim2.new(0, 70, 1, 0); modeLabel.Position = UDim2.new(0, 29, 0, 0)
+        modeLabel.BackgroundTransparency = 1; modeLabel.Font = Enum.Font.SourceSansBold; modeLabel.TextSize = 10; modeLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+        modeLabel.TextWrapped = true; modeLabel.TextXAlignment = Enum.TextXAlignment.Center
+        local nextBtn = createIconButton(modeRow, ">", 25); nextBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60); nextBtn.Position = UDim2.new(0, 103, 0.5, -12)
+        local toggleButton = createIconButton(modeRow, "▶️", 30); toggleButton.Position = UDim2.new(0, 138, 0.5, -12); toggleButton.Name = "toggleButton"
+        
+        local function updateModeDisplay() local currentModeData = PC_MODES[pc_state.currentModeIndex]; pc_state.mode = currentModeData.v; modeLabel.Text = currentModeData.n end
+        prevBtn.MouseButton1Click:Connect(function() pc_state.currentModeIndex = pc_state.currentModeIndex - 1; if pc_state.currentModeIndex < 1 then pc_state.currentModeIndex = #PC_MODES end; updateModeDisplay() end)
+        nextBtn.MouseButton1Click:Connect(function() pc_state.currentModeIndex = pc_state.currentModeIndex + 1; if pc_state.currentModeIndex > #PC_MODES then pc_state.currentModeIndex = 1 end; updateModeDisplay() end)
+        updateModeDisplay()
+
+        toggleButton.MouseButton1Click:Connect(function() if pc_state.active then stopPartController() else startPartController() end end)
+        if pc_state.active then toggleButton.Text = "⏹️"; toggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50) else toggleButton.Text = "▶️"; toggleButton.BackgroundColor3 = Color3.fromRGB(0, 200, 100) end
+        
+        closeBtn.MouseButton1Click:Connect(function() pc_fullRestore(); PartControllerGUI:Destroy() end)
+        
+        local isMinimized = false; local originalSize = MainFrame.Size; local minimizedSize = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, TitleBar.Size.Y.Offset)
+        minimizeBtn.MouseButton1Click:Connect(function()
+            isMinimized = not isMinimized; ContentFrame.Visible = not isMinimized; local targetSize = isMinimized and minimizedSize or originalSize
+            TweenService:Create(MainFrame, TweenInfo.new(0.2), {Size = targetSize}):Play()
+        end)
+    end
+    -- [[ AKHIR INTEGRASI FUNGSI PARTCONTROLLER.LUA ]]
 
     local function ToggleAntiLag(enabled)
         IsAntiLagEnabled = enabled
@@ -3014,12 +4278,12 @@ task.spawn(function()
             if not IsViewingPlayer or not currentlyViewedPlayer then return end
 
             if isRecording and currentRecordingTarget == currentlyViewedPlayer then
-                stopRecording()
+                stopRecording(false)
             elseif isRecording and currentRecordingTarget ~= currentlyViewedPlayer then
                 showNotification("Harus menghentikan rekaman saat ini terlebih dahulu.", Color3.fromRGB(200, 150, 50))
             else
                 switchTab("Rekaman")
-                startRecording(currentlyViewedPlayer)
+                startRecording(currentlyViewedPlayer, false)
             end
         end)
 
@@ -3486,6 +4750,25 @@ task.spawn(function()
     end
     -- [[ PERUBAHAN BESAR SELESAI ]]
     
+    local function Rejoin()
+        saveFeatureStates()
+        saveGuiPositions()
+        
+        if queue_on_teleport and type(queue_on_teleport) == "function" then
+            local loaderCode = "loadstring(game:HttpGet('" .. SCRIPT_URL .. "'))()"
+            queue_on_teleport(loaderCode)
+            showNotification("Re-eksekusi terjadwal, bergabung kembali...", Color3.fromRGB(50, 150, 255))
+        else
+            showNotification("Executor tidak mendukung 'queue_on_teleport'. Gunakan auto-exec.", Color3.fromRGB(255, 150, 0))
+        end
+
+        task.wait(0.1)
+        
+        pcall(function()
+            TeleportService:Teleport(game.PlaceId, LocalPlayer)
+        end)
+    end
+
     local function HopServer()
         if SCRIPT_URL == "GANTI_DENGAN_URL_RAW_PASTEBIN_ATAU_GIST_ANDA" then
             showNotification("URL Skrip belum diatur! Lihat bagian atas skrip.", Color3.fromRGB(255, 100, 0))
@@ -3801,6 +5084,40 @@ task.spawn(function()
         createToggle(GeneralTabContent, "ESP Tubuh", IsEspBodyEnabled, ToggleESPBody)
         createSlider(GeneralTabContent, "Kecepatan Jalan", 0, Settings.MaxWalkSpeed, Settings.WalkSpeed, "", 1, function(v) Settings.WalkSpeed = v; if IsWalkSpeedEnabled and LocalPlayer.Character and LocalPlayer.Character.Humanoid then LocalPlayer.Character.Humanoid.WalkSpeed = v end end)
         createToggle(GeneralTabContent, "Jalan Cepat", IsWalkSpeedEnabled, function(v) IsWalkSpeedEnabled = v; ToggleWalkSpeed(v) end)
+        
+        -- [[ INTEGRASI KUNCI KECEPATAN UI ]] --
+        createSlider(GeneralTabContent, "Kecepatan Terkunci", 0, 200, speedLock_currentSpeed, "", 1, function(v) 
+            speedLock_currentSpeed = v
+            if speedLock_isEnforced and speedLock_canEnforce() then
+                speedLock_setWalkSpeed(speedLock_humanoid, speedLock_currentSpeed)
+            end
+        end)
+        createToggle(GeneralTabContent, "Kunci Kecepatan", speedLock_isEnforced, function(state)
+            speedLock_isEnforced = state
+            local h = speedLock_humanoid
+            if not h or not h.Parent then return end
+            
+            if state then
+                if not next(speedLock_connections) then -- Re-bind if connections were lost
+                    speedLock_bindHumanoid(h)
+                end
+                if not table.find(speedLock_connections, "heartbeat") then
+                    speedLock_lastTick = 0
+                    local conn = RunService.Heartbeat:Connect(speedLock_heartbeat)
+                    table.insert(speedLock_connections, conn)
+                end
+                if speedLock_canEnforce() then speedLock_setWalkSpeed(h, speedLock_currentSpeed) end
+                showNotification("Kunci Kecepatan diaktifkan", Color3.fromRGB(50, 200, 50))
+            else
+                speedLock_disconnectAll()
+                speedLock_applyDisabledState()
+                -- Re-bind essential listeners after disconnecting all
+                task.wait(0.1)
+                speedLock_bindHumanoid(h)
+                showNotification("Kunci Kecepatan dinonaktifkan", Color3.fromRGB(200, 150, 50))
+            end
+        end)
+        
         createSlider(GeneralTabContent, "Kecepatan Terbang", 0, Settings.MaxFlySpeed, Settings.FlySpeed, "", 0.1, function(v) Settings.FlySpeed = v end)
         createToggle(GeneralTabContent, "Terbang", IsFlying, function(v) if v then if UserInputService.TouchEnabled then StartMobileFly() else StartFly() end else if UserInputService.TouchEnabled then StopMobileFly() else StopFly() end end end)
         createToggle(GeneralTabContent, "Noclip", IsNoclipEnabled, function(v) ToggleNoclip(v) end)
@@ -3816,10 +5133,256 @@ task.spawn(function()
         end)
         createButton(GeneralTabContent, "Buka Touch Fling", CreateTouchFlingGUI)
         createToggle(GeneralTabContent, "Anti-Fling", antifling_enabled, ToggleAntiFling)
+        createButton(GeneralTabContent, "Buka GUI Magnet", createMagnetGUI)
+        createButton(GeneralTabContent, "Buka GUI Part Controller", createPartControllerGUI)
     end
 
+    local function setupVipTab()
+        createToggle(VipTabContent, "Emote VIP", isEmoteEnabled, function(v)
+            if not hasPermission("VIP") then
+                showNotification("Silahkan upgrade ke VIP terlebih dahulu, Terimakasih", Color3.fromRGB(255,100,0))
+                setupVipTab() -- Redraw to reset toggle
+                return
+            end
+            isEmoteEnabled = v
+            EmoteToggleButton.Visible = v
+            if not v then
+                destroyEmoteGUI()
+            end
+            saveFeatureStates()
+        end).LayoutOrder = 1
+        createToggle(VipTabContent, "Animasi VIP", isAnimationEnabled, function(v) 
+            if not hasPermission("VIP") then
+                showNotification("Silahkan upgrade ke VIP terlebih dahulu, Terimakasih", Color3.fromRGB(255,100,0))
+                setupVipTab() -- Redraw to reset toggle
+                return
+            end
+            isAnimationEnabled = v; 
+            if isAnimationEnabled then 
+                initializeAnimationGUI() 
+                AnimationShowButton.Visible = true
+            else 
+                destroyAnimationGUI() 
+                AnimationShowButton.Visible = false
+            end 
+            saveFeatureStates()
+        end).LayoutOrder = 2
+        createToggle(VipTabContent, "Emote Transparan", isEmoteTransparent, function(v)
+            isEmoteTransparent = v
+            applyEmoteTransparency(v)
+            saveFeatureStates()
+        end).LayoutOrder = 3
+        createToggle(VipTabContent, "Animasi transparan", isAnimationTransparent, function(v)
+            isAnimationTransparent = v
+            if isAnimationEnabled and applyAnimationTransparency then applyAnimationTransparency(v) end
+            saveFeatureStates()
+        end).LayoutOrder = 4
+    end
 
-    local function setupTeleportTab()
+    setupSettingsTab = function()
+        createToggle(SettingsTabContent, "Kunci Bar Tombol", not isMiniToggleDraggable, function(v) isMiniToggleDraggable = not v end).LayoutOrder = 1
+        createSlider(SettingsTabContent, "Ukuran Tombol Navigasi", 10, 50, 30, "px", 1, function(v)
+            if MiniToggleButton then
+                MiniToggleButton.Size = UDim2.new(0, v, 0, v)
+                MiniToggleButton.TextSize = math.floor(v * 0.6)
+            end
+        end).LayoutOrder = 2
+        createButton(SettingsTabContent, "Simpan Posisi UI", saveGuiPositions).LayoutOrder = 3
+        createButton(SettingsTabContent, "Hop Server", function() HopServer() end).LayoutOrder = 4
+        createToggle(SettingsTabContent, "Anti-Lag", IsAntiLagEnabled, ToggleAntiLag).LayoutOrder = 5
+        createToggle(SettingsTabContent, "Boost FPS", IsBoostFPSEnabled, ToggleBoostFPS).LayoutOrder = 6
+        createToggle(SettingsTabContent, "Shift Lock", IsShiftLockEnabled, ToggleShiftLock).LayoutOrder = 9
+        createToggle(SettingsTabContent, "Anti AFK", IsAntiAFKEnabled, ToggleAntiAFK).LayoutOrder = 10
+        createButton(SettingsTabContent, "Rejoin", Rejoin).LayoutOrder = 10
+        createButton(SettingsTabContent, "Tutup", CloseScript).LayoutOrder = 11
+    
+        local logoutButton = createButton(SettingsTabContent, "Logout", HandleLogout)
+        logoutButton.LayoutOrder = 11
+        logoutButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    end
+
+    setupPlayerTab = function()
+        local playerHeaderFrame = Instance.new("Frame", PlayerTabContent); playerHeaderFrame.Size = UDim2.new(1, 0, 0, 55); playerHeaderFrame.BackgroundTransparency = 1
+        local playerCountLabel = Instance.new("TextLabel", playerHeaderFrame); playerCountLabel.Name = "PlayerCountLabel"; playerCountLabel.Size = UDim2.new(1, -20, 0, 15); playerCountLabel.BackgroundTransparency = 1; playerCountLabel.Text = "Pemain Online: " .. #Players:GetPlayers(); playerCountLabel.TextColor3 = Color3.fromRGB(255, 255, 255); playerCountLabel.TextSize = 12; playerCountLabel.TextXAlignment = Enum.TextXAlignment.Left; playerCountLabel.Font = Enum.Font.SourceSansBold
+        
+        local refreshButton = Instance.new("TextButton", playerHeaderFrame)
+        refreshButton.Name = "RefreshButton"
+        refreshButton.Size = UDim2.new(0, 15, 0, 15); refreshButton.Position = UDim2.new(1, -15, 0, 0); refreshButton.BackgroundTransparency = 1
+        refreshButton.Text = "🔄"; refreshButton.TextColor3 = Color3.fromRGB(0, 200, 255); refreshButton.TextSize = 14; refreshButton.Font = Enum.Font.SourceSansBold
+        
+        local isAnimatingRefresh = false
+        refreshButton.MouseButton1Click:Connect(function() 
+            if isAnimatingRefresh then return end; isAnimatingRefresh = true
+            local tweenInfo = TweenInfo.new(0.4, Enum.EasingStyle.Linear); local tween = TweenService:Create(refreshButton, tweenInfo, { Rotation = refreshButton.Rotation + 360 }); tween:Play()
+            if updatePlayerList then updatePlayerList() end 
+            tween.Completed:Connect(function() isAnimatingRefresh = false end)
+        end)
+    
+        local searchFrame = Instance.new("Frame", playerHeaderFrame); searchFrame.Size = UDim2.new(1, 0, 0, 25); searchFrame.Position = UDim2.new(0, 0, 0, 20); searchFrame.BackgroundTransparency = 1
+        local searchTextBox = Instance.new("TextBox", searchFrame); searchTextBox.Text = ""; searchTextBox.Size = UDim2.new(0.7, -10, 1, 0); searchTextBox.Position = UDim2.new(0, 5, 0, 0); searchTextBox.BackgroundColor3 = Color3.fromRGB(35, 35, 35); searchTextBox.TextColor3 = Color3.fromRGB(200, 200, 200); searchTextBox.PlaceholderText = "Cari Pemain..."; searchTextBox.TextSize = 12; searchTextBox.Font = Enum.Font.SourceSans; searchTextBox.ClearTextOnFocus = true; local sboxCorner = Instance.new("UICorner", searchTextBox); sboxCorner.CornerRadius = UDim.new(0, 5)
+        local searchButton = Instance.new("TextButton", searchFrame); searchButton.Size = UDim2.new(0.3, 0, 1, 0); searchButton.Position = UDim2.new(0.7, 0, 0, 0); searchButton.BackgroundColor3 = Color3.fromRGB(0, 150,  255); searchButton.BorderSizePixel = 0; searchButton.Text = "Cari"; searchButton.TextColor3 = Color3.fromRGB(255, 255, 255); searchButton.TextSize = 12; searchButton.Font = Enum.Font.SourceSansBold; local sbtnCorner = Instance.new("UICorner", searchButton); sbtnCorner.CornerRadius = UDim.new(0, 5)
+        
+        local function createPlayerButton(player)
+            local playerFrame = Instance.new("Frame", PlayerListContainer); playerFrame.Size = UDim2.new(1, 0, 0, 35); playerFrame.BackgroundTransparency = 1; playerFrame.Name = player.Name
+            
+            local avatarImage = Instance.new("ImageButton", playerFrame)
+            avatarImage.Name = "AvatarImageButton"
+            avatarImage.Size = UDim2.new(0, 25, 0, 25)
+            avatarImage.Position = UDim2.new(0, 5, 0.5, -12.5)
+            avatarImage.BackgroundTransparency = 1
+            avatarImage.AutoButtonColor = false
+            pcall(function() avatarImage.Image = Players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size420x420) end)
+            
+            local avatarCorner = Instance.new("UICorner", avatarImage)
+            avatarCorner.CornerRadius = UDim.new(1, 0)
+            local avatarStroke = Instance.new("UIStroke", avatarImage)
+            avatarStroke.Name = "SpectateStroke"
+            avatarStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+            avatarStroke.Color = Color3.fromRGB(40, 200, 40)
+            avatarStroke.Thickness = 1.5
+            avatarStroke.Transparency = 1 
+            
+            avatarImage.MouseButton1Click:Connect(function()
+                startSpectate(player)
+            end)
+            
+            local displaynameLabel = Instance.new("TextLabel", playerFrame); displaynameLabel.Size = UDim2.new(1, -100, 0, 15); displaynameLabel.Position = UDim2.new(0, 35, 0, 2); displaynameLabel.BackgroundTransparency = 1; displaynameLabel.TextXAlignment = Enum.TextXAlignment.Left; displaynameLabel.Text = player.DisplayName; displaynameLabel.TextColor3 = Color3.fromRGB(255, 255, 255); displaynameLabel.TextSize = 10; displaynameLabel.Font = Enum.Font.SourceSansSemibold
+            local usernameLabel = Instance.new("TextLabel", playerFrame); usernameLabel.Size = UDim2.new(1, -100, 0, 12); usernameLabel.Position = UDim2.new(0, 35, 0, 18); usernameLabel.BackgroundTransparency = 1; usernameLabel.TextXAlignment = Enum.TextXAlignment.Left; usernameLabel.Text = "@" .. player.Name; usernameLabel.TextColor3 = Color3.fromRGB(150, 150, 150); usernameLabel.TextSize = 8; usernameLabel.Font = Enum.Font.SourceSans
+            local distanceLabel = Instance.new("TextLabel", playerFrame); distanceLabel.Name = "DistanceLabel"; distanceLabel.Size = UDim2.new(1, -100, 0, 12); distanceLabel.Position = UDim2.new(0, 35, 0, 30); distanceLabel.BackgroundTransparency = 1; distanceLabel.TextXAlignment = Enum.TextXAlignment.Left; distanceLabel.TextColor3 = Color3.fromRGB(0, 255, 127); distanceLabel.TextSize = 9; distanceLabel.Font = Enum.Font.SourceSansSemibold
+            
+            local actionsFrame = Instance.new("Frame", playerFrame)
+            actionsFrame.Name = "ActionsFrame"
+            actionsFrame.Size = UDim2.new(0, 60, 0, 16)
+            actionsFrame.Position = UDim2.new(1, -65, 0.5, -8)
+            actionsFrame.BackgroundTransparency = 1
+
+            local actionsLayout = Instance.new("UIListLayout", actionsFrame)
+            actionsLayout.FillDirection = Enum.FillDirection.Horizontal
+            actionsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+            actionsLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+            actionsLayout.Padding = UDim.new(0, 2)
+            
+            local flingButton = Instance.new("TextButton", actionsFrame)
+            flingButton.Name = "FlingButton"
+            flingButton.Size = UDim2.new(0, 16, 0, 16)
+            flingButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+            flingButton.BorderSizePixel = 0
+            flingButton.Font = Enum.Font.SourceSansBold
+            flingButton.Text = "☠️"
+            flingButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+            flingButton.TextSize = 10
+            local flingCorner = Instance.new("UICorner", flingButton); flingCorner.CornerRadius = UDim.new(0, 4)
+            flingButton.MouseButton1Click:Connect(function()
+                ToggleFlingOnPlayer(player)
+            end)
+    
+            local newTeleportButton = Instance.new("TextButton", actionsFrame)
+            newTeleportButton.Name = "TeleportButton"
+            newTeleportButton.Size = UDim2.new(0, 16, 0, 16)
+            newTeleportButton.BackgroundColor3 = Color3.fromRGB(0, 120, 255)
+            newTeleportButton.BorderSizePixel = 0
+            newTeleportButton.Font = Enum.Font.SourceSansBold
+            newTeleportButton.Text = "🌀"
+            newTeleportButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+            newTeleportButton.TextSize = 10
+            local tpCorner = Instance.new("UICorner", newTeleportButton); tpCorner.CornerRadius = UDim.new(0, 4)
+            
+            newTeleportButton.MouseButton1Click:Connect(function()
+                local localChar = LocalPlayer.Character
+                local targetChar = player.Character
+    
+                if not (targetChar and targetChar:FindFirstChild("HumanoidRootPart") and localChar and localChar:FindFirstChild("HumanoidRootPart")) then
+                    showNotification("Target atau karakter Anda tidak ditemukan.", Color3.fromRGB(200, 50, 50))
+                    return
+                end
+    
+                local targetPosition = targetChar.HumanoidRootPart.Position
+                local teleportCFrame = CFrame.new(targetPosition + Vector3.new(0, 3, 0))
+    
+                if IsViewingPlayer then
+                    originalPlayerCFrame = teleportCFrame
+                    if localPlayerIsHidden and localChar.Parent == nil then
+                        localChar:SetPrimaryPartCFrame(teleportCFrame)
+                    end
+                    showNotification("Posisi kembali Anda diatur ke " .. player.DisplayName, Color3.fromRGB(50, 150, 255))
+                else
+                    localChar.HumanoidRootPart.CFrame = teleportCFrame
+                end
+            end)
+
+            local copyMovementButton = Instance.new("TextButton", actionsFrame)
+            copyMovementButton.Name = "CopyMovementButton"
+            copyMovementButton.Size = UDim2.new(0, 16, 0, 16)
+            copyMovementButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80) -- Default color
+            copyMovementButton.BorderSizePixel = 0
+            copyMovementButton.Font = Enum.Font.SourceSansBold
+            copyMovementButton.Text = "👯"
+            copyMovementButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+            copyMovementButton.TextSize = 12
+            local copyCorner = Instance.new("UICorner", copyMovementButton); copyCorner.CornerRadius = UDim.new(0, 5)
+            copyMovementButton.MouseButton1Click:Connect(function()
+                toggleCopyMovement(player)
+            end)
+            
+            return playerFrame
+        end
+    
+        searchTextBox.FocusLost:Connect(function() CurrentPlayerFilter = searchTextBox.Text; updatePlayerList() end)
+        searchButton.MouseButton1Click:Connect(function() CurrentPlayerFilter = searchTextBox.Text; updatePlayerList() end)
+    
+        local function setupPlayer(player)
+            if player == LocalPlayer then return end
+            
+            local button = createPlayerButton(player)
+            PlayerButtons[player.UserId] = button
+            updatePlayerList()
+        end
+    
+        ConnectEvent(RunService.RenderStepped, function()
+            if MainFrame.Visible and PlayerTabContent.Visible then
+                for player, button in pairs(PlayerButtons) do
+                    updateSinglePlayerButton(Players:GetPlayerByUserId(player))
+                end
+            end
+        end)
+        
+        ConnectEvent(Players.PlayerRemoving, function(player)
+            if PlayerButtons[player.UserId] then
+                PlayerButtons[player.UserId]:Destroy()
+                PlayerButtons[player.UserId] = nil
+            end
+            if espCache[player.UserId] then
+                if espCache[player.UserId].billboard then espCache[player.UserId].billboard:Destroy() end
+                if espCache[player.UserId].highlight and espCache[player.UserId].highlight.Parent then
+                     espCache[player.UserId].highlight:Destroy()
+                end
+                espCache[player.UserId] = nil
+            end
+            if IsViewingPlayer and currentlyViewedPlayer == player then
+                cycleSpectate(1) 
+            end
+            if currentFlingTarget == player then
+                ToggleFlingOnPlayer(player) 
+            end
+            task.wait(0.1)
+            updatePlayerList()
+        end)
+    
+        ConnectEvent(Players.PlayerAdded, setupPlayer)
+    
+        for _, player in ipairs(Players:GetPlayers()) do
+            setupPlayer(player)
+        end
+
+        ConnectEvent(RunService.RenderStepped, function()
+            if SpectatorGui and SpectatorGui.Enabled then
+                updateSpectatorGUI()
+            end
+        end)
+    end
+    
+    
+    setupTeleportTab = function()
         createButton(TeleportTabContent, "Pindai Ulang Map", function() for _, part in pairs(Workspace:GetDescendants()) do if part:IsA("BasePart") then local nameLower = part.Name:lower(); if (nameLower:find("checkpoint") or nameLower:find("pos") or nameLower:find("finish") or nameLower:find("start")) and not Players:GetPlayerFromCharacter(part.Parent) then addTeleportLocation(part.Name, part.CFrame) end end end end).LayoutOrder = 1
         createButton(TeleportTabContent, "Simpan Lokasi Saat Ini", function() if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then local newName = "Kustom " .. (#savedTeleportLocations + 1); addTeleportLocation(newName, LocalPlayer.Character.HumanoidRootPart.CFrame) end end).LayoutOrder = 2
         
@@ -3870,9 +5433,59 @@ task.spawn(function()
             areTeleportIconsVisible = v
             updateTeleportIconVisibility()
         end).LayoutOrder = 4
-    end
 
-    local function setupVipTab()
+        -- FITUR BARU: AUTO LOOPING TELEPORT DENGAN UI KOMPAK
+        local autoLoopSettingsFrame = Instance.new("Frame", TeleportTabContent)
+        autoLoopSettingsFrame.Name, autoLoopSettingsFrame.Size, autoLoopSettingsFrame.BackgroundTransparency, autoLoopSettingsFrame.Visible, autoLoopSettingsFrame.LayoutOrder = "AutoLoopSettingsFrame", UDim2.new(1, 0, 0, 30), 1, false, 6
+        local settingsLayout = Instance.new("UIListLayout", autoLoopSettingsFrame); settingsLayout.FillDirection, settingsLayout.VerticalAlignment, settingsLayout.Padding = Enum.FillDirection.Horizontal, Enum.VerticalAlignment.Center, UDim.new(0, 5)
+
+        local function createCompactInput(parent, label, default)
+            local frame = Instance.new("Frame", parent); frame.Size, frame.BackgroundTransparency = UDim2.new(0.4, -12, 1, 0), 1
+            local layout = Instance.new("UIListLayout", frame); layout.FillDirection, layout.VerticalAlignment = Enum.FillDirection.Horizontal, Enum.VerticalAlignment.Center
+            local textLabel = Instance.new("TextLabel", frame); textLabel.Size = UDim2.new(0, 15, 1, 0); textLabel.Text, textLabel.TextColor3, textLabel.TextSize, textLabel.Font, textLabel.BackgroundTransparency = label, Color3.fromRGB(200,200,200), 11, Enum.Font.SourceSans, 1
+            local textBox = Instance.new("TextBox", frame); textBox.Size = UDim2.new(1, -15, 0, 20); textBox.Text, textBox.BackgroundColor3 = default, Color3.fromRGB(50, 50, 50); textBox.TextColor3, textBox.TextSize, textBox.Font = Color3.fromRGB(255,255,255), 12, Enum.Font.SourceSans; Instance.new("UICorner", textBox).CornerRadius = UDim.new(0, 4)
+            return textBox
+        end
+
+        local repeatInput = createCompactInput(autoLoopSettingsFrame, "U:", "5")
+        local delayInput = createCompactInput(autoLoopSettingsFrame, "D:", "2")
+        local playStopButton = createButton(autoLoopSettingsFrame, "▶️", function() end)
+        playStopButton.Size, playStopButton.BackgroundColor3 = UDim2.new(0.2, 0, 0, 22), Color3.fromRGB(50, 180, 50)
+
+        createToggle(TeleportTabContent, "Auto Loop", false, function(isVisible) autoLoopSettingsFrame.Visible = isVisible end).LayoutOrder = 5
+
+        playStopButton.MouseButton1Click:Connect(function()
+            if not hasPermission("Normal") then
+                showNotification("Tingkatkan ke Normal/VIP untuk menggunakan fitur ini.", Color3.fromRGB(255,100,0))
+                return
+            end
+            if isAutoLooping then -- Tombol Stop ditekan
+                isAutoLooping = false
+                playStopButton.Text, playStopButton.BackgroundColor3 = "▶️", Color3.fromRGB(50, 180, 50)
+            else -- Tombol Play ditekan
+                local repetitions, delayTime = tonumber(repeatInput.Text), tonumber(delayInput.Text)
+                if not repetitions or repetitions <= 0 or not delayTime or delayTime < 0 then showNotification("Input jumlah & delay tidak valid.", Color3.fromRGB(200, 50, 50)); return end
+                if #savedTeleportLocations == 0 then showNotification("Tidak ada lokasi teleport.", Color3.fromRGB(200, 50, 50)); return end
+                
+                isAutoLooping = true
+                playStopButton.Text, playStopButton.BackgroundColor3 = "⏹️", Color3.fromRGB(200, 50, 50)
+                
+                task.spawn(function()
+                    for i = 1, repetitions do
+                        if not isAutoLooping then break end
+                        for _, locData in ipairs(savedTeleportLocations) do
+                            if not isAutoLooping then break end
+                            if LocalPlayer.Character and LocalPlayer.Character.HumanoidRootPart then LocalPlayer.Character.HumanoidRootPart.CFrame = locData.CFrame * CFrame.new(0, 3, 0) else isAutoLooping = false; break end
+                            task.wait(delayTime)
+                        end
+                    end
+                    isAutoLooping = false; playStopButton.Text, playStopButton.BackgroundColor3 = "▶️", Color3.fromRGB(50, 180, 50)
+                end)
+            end
+        end)
+    end
+    
+    setupVipTab = function()
         createToggle(VipTabContent, "Emote VIP", isEmoteEnabled, function(v)
             isEmoteEnabled = v
             EmoteToggleButton.Visible = v
@@ -3892,34 +5505,19 @@ task.spawn(function()
             end 
             saveFeatureStates()
         end).LayoutOrder = 2
+        createToggle(VipTabContent, "Emote Transparan", isEmoteTransparent, function(v)
+            isEmoteTransparent = v
+            applyEmoteTransparency(v)
+            saveFeatureStates()
+        end).LayoutOrder = 3
         createToggle(VipTabContent, "Animasi transparan", isAnimationTransparent, function(v)
             isAnimationTransparent = v
             if isAnimationEnabled and applyAnimationTransparency then applyAnimationTransparency(v) end
             saveFeatureStates()
         end).LayoutOrder = 4
     end
-
-    local function setupSettingsTab()
-        createToggle(SettingsTabContent, "Kunci Bar Tombol", not isMiniToggleDraggable, function(v) isMiniToggleDraggable = not v end).LayoutOrder = 1
-        createSlider(SettingsTabContent, "Ukuran Tombol Navigasi", 10, 50, 30, "px", 1, function(v)
-            if MiniToggleButton then
-                MiniToggleButton.Size = UDim2.new(0, v, 0, v)
-                MiniToggleButton.TextSize = math.floor(v * 0.6)
-            end
-        end).LayoutOrder = 2
-        createButton(SettingsTabContent, "Simpan Posisi UI", saveGuiPositions).LayoutOrder = 3
-        createButton(SettingsTabContent, "Hop Server", function() HopServer() end).LayoutOrder = 4
-        createToggle(SettingsTabContent, "Anti-Lag", IsAntiLagEnabled, ToggleAntiLag).LayoutOrder = 5
-        createToggle(SettingsTabContent, "Boost FPS", IsBoostFPSEnabled, ToggleBoostFPS).LayoutOrder = 6
-        createToggle(SettingsTabContent, "Shift Lock", IsShiftLockEnabled, ToggleShiftLock).LayoutOrder = 9
-        createButton(SettingsTabContent, "Tutup", CloseScript).LayoutOrder = 11
     
-        local logoutButton = createButton(SettingsTabContent, "Logout", HandleLogout)
-        logoutButton.LayoutOrder = 11
-        logoutButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-    end
-
-    local function setupRekamanTab()
+    setupRekamanTab = function()
         -- [[ PERBAIKAN: Tata letak dirombak untuk memperbaiki masalah scrolling ]]
         -- 1. Buat kontainer untuk semua kontrol statis (tombol, input, dll.)
         local controlsContainer = Instance.new("Frame")
@@ -3970,10 +5568,11 @@ task.spawn(function()
         
         -- [[ Variabel dan fungsi inti ]]
         local recStatusLabel, recordButton, playButton
-        local startRecording, stopActions, playSequence, playSingleRecording
+        local playSequence, playSingleRecording
         local selectedRecordings = {}
         local playbackConnection = nil
         local isPaused = false
+        local pausedAtTime = 0 -- Waktu saat jeda
         local isAnimationBypassEnabled = false
         local originalPlaybackWalkSpeed = 16
         local playbackMovers = {}
@@ -4029,152 +5628,65 @@ task.spawn(function()
             recordingsListFrame.CanvasPosition = scrollPos
         end
     
-        startRecording = function(targetPlayer)
-            if isRecording then return end
-            
-            targetPlayer = targetPlayer or LocalPlayer -- Default ke diri sendiri jika tidak ada target
-            currentRecordingTarget = targetPlayer
-
-            local char = targetPlayer.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-
-            if not (hrp and humanoid) then
-                recStatusLabel.Text = "Karakter target tidak ditemukan."
-                currentRecordingTarget = nil
-                return
-            end
-            
-            isRecording = true
-            currentRecordingData = {}
-            local startTime = tick()
-            recStatusLabel.Text = "Merekam: " .. targetPlayer.DisplayName .. " 🔴"
-            
-            recordButton.Text = "⏹️"
-            recordButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-
-            local lastPosition = hrp.Position
-            local TELEPORT_THRESHOLD = 50 
-
-            recordingConnection = RunService.Heartbeat:Connect(function()
-                if not isRecording then return end
-                
-                -- [[ PERUBAHAN PENTING: Pastikan target masih valid ]]
-                char = currentRecordingTarget and currentRecordingTarget.Character
-                hrp = char and char:FindFirstChild("HumanoidRootPart")
-                humanoid = char and char:FindFirstChildOfClass("Humanoid")
-                if not (hrp and humanoid and humanoid.Health > 0) then
-                    recStatusLabel.Text = "Target hilang, perekaman dihentikan."
-                    stopActions()
-                    return
-                end
-
-                local currentCFrame = hrp.CFrame
-                local currentPosition = currentCFrame.Position
-                local distance = (currentPosition - lastPosition).Magnitude
-                
-                local frameData = {
-                    time = tick() - startTime,
-                    cframe = {currentCFrame:GetComponents()},
-                    state = tostring(humanoid:GetState()),
-                    anims = {}
-                }
-
-                if distance > TELEPORT_THRESHOLD then
-                    frameData.isTeleport = true
-                end
-
-                for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
-                    table.insert(frameData.anims, {id = track.Animation.AnimationId, time = track.TimePosition})
-                end
-                
-                table.insert(currentRecordingData, frameData)
-                lastPosition = currentPosition
-            end)
-        end
     
-        local stopRecording, stopPlayback -- Deklarasi awal
+        local stopPlayback -- Deklarasi awal
 
-        stopRecording = function()
-            if not isRecording then return end
-            isRecording = false
-            if recordingConnection then recordingConnection:Disconnect(); recordingConnection = nil end
-            
-            if #currentRecordingData > 1 then
-                local baseName = (currentRecordingTarget and currentRecordingTarget.Name ~= LocalPlayer.Name) and "Rekaman " .. currentRecordingTarget.Name or "Rekaman Diri"
-                local newName, i = baseName .. " 1", 1
-                while savedRecordings[newName] do i += 1; newName = baseName .. " " .. i end
-                
-                local recordingObject = {
-                    frames = currentRecordingData,
-                    targetUserId = currentRecordingTarget.UserId
-                }
-                savedRecordings[newName] = recordingObject
-                
-                saveRecordingsData()
-                recStatusLabel.Text = "Rekaman disimpan sebagai: " .. newName
-                updateRecordingsList()
-            else
-                recStatusLabel.Text = "Perekaman dibatalkan (terlalu singkat)."
-            end
-            currentRecordingData = {}
-            currentRecordingTarget = nil -- Reset target
-            
-            recordButton.Text = "🔴"
-            recordButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-        end
 
         local cleanupSinglePlayback -- Deklarasi awal
         
         cleanupSinglePlayback = function(isSequence)
-            isSequence = isSequence or false -- Default to false
-            if playbackMovers.guidePart and playbackMovers.guidePart.Parent then
-                playbackMovers.guidePart:Destroy()
+            isSequence = isSequence or false
+
+            -- Disable movers before destroying to release control smoothly
+            if playbackMovers.alignPos then pcall(function() playbackMovers.alignPos.Enabled = false end) end
+            if playbackMovers.alignOrient then pcall(function() playbackMovers.alignOrient.Enabled = false end) end
+            task.wait(0.05) -- Wait a couple frames for physics to settle
+
+            -- Destroy all playback-related instances
+            for _, mover in pairs(playbackMovers) do
+                if mover and mover.Parent then pcall(function() mover:Destroy() end) end
             end
-            if playbackMovers.attachment and playbackMovers.attachment.Parent then
-                playbackMovers.attachment:Destroy()
-            end
-            if playbackMovers.alignPos and playbackMovers.alignPos.Parent then
-                playbackMovers.alignPos:Destroy()
-            end
-            if playbackMovers.alignOrient and playbackMovers.alignOrient.Parent then
-                playbackMovers.alignOrient:Destroy()
-            end
-            -- Clear movers table
             playbackMovers = {}
 
             local char = LocalPlayer.Character
-            if char then
-                local humanoid = char:FindFirstChildOfClass("Humanoid")
-                if humanoid then
-                    humanoid.WalkSpeed = originalPlaybackWalkSpeed
-                    humanoid.PlatformStand = false
-                    -- [[ PERBAIKAN: Hanya hentikan animasi jika bukan bagian dari sekuens ]]
-                    if not isSequence then
-                        for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
-                            track:Stop(0.1)
-                        end
+            if not char then return end
+
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
+
+            -- Clean up sound
+            if hrp then
+                local customSound = hrp:FindFirstChild("CustomRunningSound")
+                if customSound then pcall(function() customSound:Destroy() end) end
+            end
+
+            if humanoid then
+                humanoid.WalkSpeed = originalPlaybackWalkSpeed
+                humanoid.PlatformStand = false
+                humanoid.AutoRotate = true
+
+                if not isSequence then
+                    for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
+                        pcall(function() track:Stop(0.1) end)
                     end
                 end
+            end
 
-                local hrp = char:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    local customRunningSound = hrp:FindFirstChild("CustomRunningSound")
-                    if customRunningSound then
-                        customRunningSound:Destroy()
-                    end
-                end
-
-
-                -- Additional cleanup: ensure HRP velocity/anchored reset and humanoid is usable
-                if hrp then
-                    pcall(function() hrp.Velocity = Vector3.new(0,0,0) end)
-                    pcall(function() hrp.Anchored = false end)
-                end
-                if humanoid then
-                    pcall(function() humanoid.AutoRotate = true end)
-                    pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Running) end)
-                end
+            -- Force physics state reset and return network ownership
+            if hrp then
+                pcall(function()
+                    hrp.Velocity = Vector3.new(0, 0, 0)
+                    hrp.RotVelocity = Vector3.new(0, 0, 0)
+                    hrp.Anchored = false
+                    hrp:SetNetworkOwner(nil) -- Return control explicitly
+                end)
+            end
+            
+            -- Force the humanoid into a controllable state
+            if humanoid and humanoid:GetState() ~= Enum.HumanoidStateType.Dead then
+                pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.GettingUp) end)
+                task.wait()
+                pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Running) end)
             end
         end
 
@@ -4197,234 +5709,40 @@ task.spawn(function()
             end
         end
 
-        -- Fungsi lama, sekarang hanya memanggil fungsi baru untuk kompatibilitas
         stopActions = function()
-            stopRecording()
-            stopPlayback()
-        end
-
-        playSingleRecording = function(recordingObject, onComplete)
-            local char = LocalPlayer.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-            if not (hrp and humanoid) then if onComplete then onComplete() end; return end
+            -- Force stop recording
+            isRecording = false
+            if recordingConnection then
+                recordingConnection:Disconnect()
+                recordingConnection = nil
+            end
+            local indicatorGui = CoreGui:FindFirstChild("RecordingIndicatorGUI")
+            if indicatorGui then
+                indicatorGui:Destroy()
+            end
+            if recordButton then
+                recordButton.Text = "🔴"
+                recordButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+            end
             
-            originalPlaybackWalkSpeed = humanoid.WalkSpeed
-        -- Mark playback active and ensure Animate script is enabled so it can auto-switch walk/run
-        IsPlaybackActive = true
-        local animateScript = char and char:FindFirstChild("Animate")
-        if animateScript then
-            savedAnimateDisabled = animateScript.Disabled
-            pcall(function() animateScript.Disabled = false end)
-        end
-        
-            local recordingData = recordingObject.frames or recordingObject
-            if not recordingData or #recordingData < 1 then if onComplete then onComplete() end; return end
-        
-            local recordingDuration = recordingData[#recordingData].time
-            if recordingDuration <= 0 then if onComplete then onComplete() end; return end
-        
-            local animationCache = {}
-            playbackMovers = {} -- Reset movers for this specific playback
-            
-            -- Create CFrame movers for all modes (used for jumps/falls in bypass)
-            pcall(function()
-                local attachment = Instance.new("Attachment", hrp); attachment.Name = "ReplayAttachment"
-                local alignPos = Instance.new("AlignPosition", attachment); alignPos.Attachment0 = attachment; alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment; alignPos.Responsiveness = 200; alignPos.MaxForce = 100000
-                local alignOrient = Instance.new("AlignOrientation", attachment); alignOrient.Attachment0 = attachment; alignOrient.Mode = Enum.OrientationAlignmentMode.OneAttachment; alignOrient.Responsiveness = 200; alignOrient.MaxTorque = 100000
-                playbackMovers.attachment = attachment
-                playbackMovers.alignPos = alignPos
-                playbackMovers.alignOrient = alignOrient
-            end)
-
-            if isAnimationBypassEnabled then
-                -- In bypass mode, also create the guide part for running
-                pcall(function()
-                    local guidePart = Instance.new("Part")
-                    guidePart.Name = "PlaybackGuidePart"
-                    guidePart.Size = Vector3.new(1,1,1)
-                    guidePart.Transparency = 1
-                    guidePart.CanCollide = false
-                    guidePart.Anchored = true
-                    guidePart.Parent = workspace
-                    playbackMovers.guidePart = guidePart
-                end)
+            -- Force stop playback
+            isPlaying = false
+            isPaused = false
+            if playbackConnection then
+                playbackConnection:Disconnect()
+                playbackConnection = nil
+            end
+            cleanupSinglePlayback(false)
+            if playButton then
+                playButton.Text = "▶️"
+                playButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
             end
 
-            local soundJumping, soundLanding, customRunningSound
-            pcall(function()
-                soundJumping = hrp:FindFirstChild("Jumping")
-                soundLanding = hrp:FindFirstChild("FreeFalling")
-                customRunningSound = Instance.new("Sound", hrp)
-                customRunningSound.Name = "CustomRunningSound"
-                customRunningSound.Looped = true
-                local originalRunningSound = hrp:FindFirstChild("Running")
-                if originalRunningSound and originalRunningSound:IsA("Sound") then
-                    customRunningSound.SoundId = originalRunningSound.SoundId
-                    customRunningSound.Volume = originalRunningSound.Volume
-                    customRunningSound.Pitch = originalRunningSound.Pitch
-                else
-                    customRunningSound.SoundId = "rbxassetid://122226169"
-                end
-            end)
-            
-            local lastPlayerState = "Idle"
-            local loopStartTime = tick()
-            local lastFrameIndex = 1
-            local wasPaused = false
-            
-            playbackConnection = RunService.RenderStepped:Connect(function(dt)
-                if not isPlaying then
-                    if playbackConnection then playbackConnection:Disconnect(); playbackConnection = nil end
-                    return 
-                end
-
-                if isPaused then
-                    if not wasPaused then 
-                        if playbackMovers.alignPos then playbackMovers.alignPos.MaxForce = 0 end
-                        if playbackMovers.alignOrient then playbackMovers.alignOrient.MaxTorque = 0 end
-                        if customRunningSound and customRunningSound.IsPlaying then customRunningSound:Stop() end
-                        
-                        for id, track in pairs(animationCache) do
-                            if track.IsPlaying then track:Stop(0.1) end
-                        end
-                        wasPaused = true
-                    end
-                    loopStartTime = loopStartTime + dt 
-                    return 
-                end
-
-                if wasPaused then 
-                    if playbackMovers.alignPos then playbackMovers.alignPos.MaxForce = 100000 end
-                    if playbackMovers.alignOrient then playbackMovers.alignOrient.MaxTorque = 100000 end
-                    wasPaused = false
-                end
-        
-                local elapsedTime = tick() - loopStartTime
-                
-                if elapsedTime >= recordingDuration then
-                    if playbackConnection then
-                        playbackConnection:Disconnect()
-                        playbackConnection = nil
-                    end
-                    cleanupSinglePlayback(onComplete ~= nil) -- [[ PERBAIKAN ]]: Teruskan true jika ada callback 'onComplete' (artinya ini adalah sekuens)
-                    if onComplete then
-                        onComplete() -- Panggil callback untuk melanjutkan ke rekaman berikutnya.
-                    end
-                    return
-                end
-                
-                local frameToPlay, currentFrame
-                for i = lastFrameIndex, #recordingData do
-                    if recordingData[i].time >= elapsedTime then
-                        frameToPlay = recordingData[i]
-                        currentFrame = recordingData[i-1] or recordingData[1]
-                        lastFrameIndex = i
-                        break
-                    end
-                end
-                
-                if not frameToPlay then
-                    frameToPlay = recordingData[#recordingData]
-                    currentFrame = recordingData[#recordingData]
-                end
-        
-                local cframeToPlay = CFrame.new(unpack(frameToPlay.cframe))
-                local cframeCurrent = CFrame.new(unpack(currentFrame.cframe))
-                
-                local velocity = 0
-                local timeDelta = frameToPlay.time - currentFrame.time
-                if timeDelta > 0.001 then
-                    local distanceDelta = (cframeToPlay.Position - cframeCurrent.Position).Magnitude
-                    velocity = distanceDelta / timeDelta
-                end
-                
-                local interpolatedCFrame
-                if frameToPlay.isTeleport then
-                    if not isAnimationBypassEnabled then hrp.CFrame = cframeToPlay end
-                    interpolatedCFrame = cframeToPlay
-                    loopStartTime = tick() - frameToPlay.time
-                else
-                    local alpha = (elapsedTime - currentFrame.time) / (frameToPlay.time - currentFrame.time)
-                    alpha = math.clamp(alpha, 0, 1)
-                    interpolatedCFrame = cframeCurrent:Lerp(cframeToPlay, alpha)
-                end
-
-                local currentState = currentFrame.state
-                
-                if not isAnimationBypassEnabled then
-                    if playbackMovers.alignPos then
-                        playbackMovers.alignPos.Position = interpolatedCFrame.Position
-                        playbackMovers.alignOrient.CFrame = interpolatedCFrame
-                    end
-                    humanoid.WalkSpeed = originalPlaybackWalkSpeed
-
-                    local animFrame = currentFrame
-                    local requiredAnims = {}
-                    local runAnimId = lastAnimations.Run
-                    local animationSpeed = velocity / (originalPlaybackWalkSpeed > 0 and originalPlaybackWalkSpeed or 16)
-                    
-                    for _, animData in ipairs(animFrame.anims) do
-                        requiredAnims[animData.id] = animData.time
-                        if not animationCache[animData.id] then
-                            local anim = Instance.new("Animation"); anim.AnimationId = animData.id
-                            animationCache[animData.id] = humanoid:LoadAnimation(anim)
-                        end
-                        local track = animationCache[animData.id]
-                        if not track.IsPlaying then track:Play(0.1) end
-                        
-                        if animData.id == runAnimId and velocity > 1 then
-                            track:AdjustSpeed(animationSpeed)
-                        else
-                            track:AdjustSpeed(1)
-                        end
-                        track.TimePosition = animData.time
-                    end
-                    for id, track in pairs(animationCache) do
-                        if not requiredAnims[id] and track.IsPlaying then track:Stop(0.1) end
-                    end
-                else -- [[ PERBAIKAN: Logika bypass disederhanakan untuk menghilangkan stutter ]]
-                    -- Selalu gunakan AlignPosition dan AlignOrientation untuk pergerakan yang mulus.
-                    -- Menghilangkan pergantian antara MoveTo dan physics movers yang menyebabkan glitch.
-                    if playbackMovers.alignPos then
-                        playbackMovers.alignPos.MaxForce = 100000
-                        playbackMovers.alignOrient.MaxTorque = 100000
-                        playbackMovers.alignPos.Position = interpolatedCFrame.Position
-                        playbackMovers.alignOrient.CFrame = interpolatedCFrame
-                    end
-                    
-                    -- Hapus semua animasi yang sedang berjalan dari pemutaran sebelumnya untuk memastikan
-                    -- hanya animasi dari Animate script yang berjalan.
-                    if next(animationCache) then
-                        for id, track in pairs(animationCache) do
-                            if track.IsPlaying then track:Stop(0) end; animationCache[id] = nil
-                        end
-                    end
-                end
-
-                pcall(function()
-                    if currentState and currentState ~= lastPlayerState then
-                        local stateName = currentState:match("Enum.HumanoidStateType%.(.*)")
-                        if stateName and Enum.HumanoidStateType[stateName] then
-                            humanoid:ChangeState(Enum.HumanoidStateType[stateName])
-                        end
-                        if currentState == "Enum.HumanoidStateType.Jumping" and soundJumping then soundJumping:Play() end
-                        if lastPlayerState == "Enum.HumanoidStateType.Freefall" and currentState ~= "Enum.HumanoidStateType.Jumping" and soundLanding then soundLanding:Play() end
-                    end
-                    
-                    if customRunningSound then
-                        local isRunning = (currentState == "Enum.HumanoidStateType.Running" or currentState == "Enum.HumanoidStateType.RunningNoPhysics")
-                        if isRunning and velocity > 1 and not customRunningSound.IsPlaying then
-                            customRunningSound.PlaybackSpeed = velocity / (originalPlaybackWalkSpeed > 0 and originalPlaybackWalkSpeed or 16)
-                            customRunningSound:Play()
-                        elseif (not isRunning or velocity <= 1) and customRunningSound.IsPlaying then
-                            customRunningSound:Stop()
-                        end
-                    end
-                    lastPlayerState = currentState
-                end)
-            end)
+            if recStatusLabel then
+                recStatusLabel.Text = "Semua aksi dihentikan."
+            end
         end
+
 
         playSequence = function(replayCountBox)
             if isPlaying then return end
@@ -4472,6 +5790,11 @@ task.spawn(function()
                         recStatusLabel.Text = "Pemutaran sekuens selesai."
                         return
                     end
+                    
+                    -- Reset state for smooth looping by performing a full cleanup
+                    cleanupSinglePlayback(false) 
+                    task.wait(0.2) -- Short delay to ensure full reset
+
                     currentSequenceIndex = 1
                     recStatusLabel.Text = string.format("Memutar sekuens: %d/%s", currentPlayRun, tostring(replayCount) == "inf" and "∞" or tostring(replayCount))
                 end
@@ -4639,6 +5962,357 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
                 warn("Export Error:", writeError)
             end
         end)
+        startRecording = function(targetPlayer, showNotificationFlag)
+            if isRecording then return end
+            
+            targetPlayer = targetPlayer or LocalPlayer -- Default ke diri sendiri jika tidak ada target
+            currentRecordingTarget = targetPlayer
+
+            -- GUI Indikator Perekaman
+            local recordingIndicatorGui = Instance.new("ScreenGui", CoreGui)
+            recordingIndicatorGui.Name = "RecordingIndicatorGUI"
+            recordingIndicatorGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+            recordingIndicatorGui.DisplayOrder = 99
+            local indicatorFrame = Instance.new("Frame", recordingIndicatorGui)
+            indicatorFrame.AnchorPoint = Vector2.new(1, 0)
+            indicatorFrame.Position = UDim2.new(1, -10, 0, 10)
+            indicatorFrame.Size = UDim2.new(0, 110, 0, 25)
+            indicatorFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+            indicatorFrame.BackgroundTransparency = 0.5
+            local indicatorCorner = Instance.new("UICorner", indicatorFrame)
+            indicatorCorner.CornerRadius = UDim.new(0, 8)
+            local indicatorLabel = Instance.new("TextLabel", indicatorFrame)
+            indicatorLabel.Size = UDim2.new(1, 0, 1, 0)
+            indicatorLabel.BackgroundTransparency = 1
+            indicatorLabel.Font = Enum.Font.SourceSansBold
+            indicatorLabel.Text = "🔴 Recording..."
+            indicatorLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+            indicatorLabel.TextSize = 14
+
+            local char = targetPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+
+            if not (hrp and humanoid) then
+                recStatusLabel.Text = "Karakter target tidak ditemukan."
+                currentRecordingTarget = nil
+                return
+            end
+            
+            isRecording = true
+            currentRecordingData = {}
+            local startTime = tick()
+            recStatusLabel.Text = "Merekam: " .. targetPlayer.DisplayName .. " 🔴"
+            if showNotificationFlag then
+                showNotification("Recording started (Press C to stop)", Color3.fromRGB(50, 200, 50))
+            end
+            
+            recordButton.Text = "⏹️"
+            recordButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+
+            local lastPosition = hrp.Position
+            local TELEPORT_THRESHOLD = 50 
+
+            recordingConnection = RunService.Heartbeat:Connect(function()
+                if not isRecording then return end
+                
+                -- [[ PERUBAHAN PENTING: Pastikan target masih valid ]]
+                char = currentRecordingTarget and currentRecordingTarget.Character
+                hrp = char and char:FindFirstChild("HumanoidRootPart")
+                humanoid = char and char:FindFirstChildOfClass("Humanoid")
+                if not (hrp and humanoid and humanoid.Health > 0) then
+                    recStatusLabel.Text = "Target hilang, perekaman dihentikan."
+                    stopActions()
+                    return
+                end
+
+                local currentCFrame = hrp.CFrame
+                local currentPosition = currentCFrame.Position
+                local distance = (currentPosition - lastPosition).Magnitude
+                
+                local frameData = {
+                    time = tick() - startTime,
+                    cframe = {currentCFrame:GetComponents()},
+                    state = tostring(humanoid:GetState()),
+                    anims = {}
+                }
+
+                if distance > TELEPORT_THRESHOLD then
+                    frameData.isTeleport = true
+                end
+
+                for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
+                    table.insert(frameData.anims, {id = track.Animation.AnimationId, time = track.TimePosition})
+                end
+                
+                table.insert(currentRecordingData, frameData)
+                lastPosition = currentPosition
+            end)
+        end
+
+        stopRecording = function(showNotificationFlag)
+            if not isRecording then return end
+            isRecording = false
+            if showNotificationFlag then
+                showNotification("Recording stopped.", Color3.fromRGB(200, 50, 50))
+            end
+            if recordingConnection then recordingConnection:Disconnect(); recordingConnection = nil end
+            
+            -- Hapus GUI Indikator Perekaman
+            local indicatorGui = CoreGui:FindFirstChild("RecordingIndicatorGUI")
+            if indicatorGui then
+                indicatorGui:Destroy()
+            end
+
+            if #currentRecordingData > 1 then
+                local baseName = (currentRecordingTarget and currentRecordingTarget.Name ~= LocalPlayer.Name) and "Rekaman " .. currentRecordingTarget.Name or "Rekaman Diri"
+                local newName, i = baseName .. " 1", 1
+                while savedRecordings[newName] do i += 1; newName = baseName .. " " .. i end
+                
+                local recordingObject = {
+                    frames = currentRecordingData,
+                    targetUserId = currentRecordingTarget.UserId
+                }
+                savedRecordings[newName] = recordingObject
+                
+                saveRecordingsData()
+                recStatusLabel.Text = "Rekaman disimpan sebagai: " .. newName
+                showNotification("Rekaman disimpan: " .. newName, Color3.fromRGB(50, 200, 50))
+                updateRecordingsList()
+            else
+                recStatusLabel.Text = "Perekaman dibatalkan (terlalu singkat)."
+                showNotification("Perekaman dibatalkan (terlalu singkat).", Color3.fromRGB(200, 150, 50))
+            end
+            currentRecordingData = {}
+            currentRecordingTarget = nil -- Reset target
+            
+            recordButton.Text = "🔴"
+            recordButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+        end
+        
+        playSingleRecording = function(recordingObject, onComplete)
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+            if not (hrp and humanoid) then if onComplete then onComplete() end; return end
+        
+            originalPlaybackWalkSpeed = humanoid.WalkSpeed
+            IsPlaybackActive = true
+            local animateScript = char and char:FindFirstChild("Animate")
+            if animateScript then
+                savedAnimateDisabled = animateScript.Disabled
+                pcall(function() animateScript.Disabled = false end)
+            end
+        
+            local recordingData = recordingObject.frames or recordingObject
+            if not recordingData or #recordingData < 1 then if onComplete then onComplete() end; return end
+        
+            local recordingDuration = recordingData[#recordingData].time
+            if recordingDuration <= 0 then if onComplete then onComplete() end; return end
+        
+            local animationCache = {}
+            playbackMovers = {}
+        
+            pcall(function()
+                local responsivenessValue = isAnimationBypassEnabled and 35 or 200
+                local attachment = Instance.new("Attachment", hrp); attachment.Name = "ReplayAttachment"
+                local alignPos = Instance.new("AlignPosition", attachment); alignPos.Attachment0 = attachment; alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment; alignPos.Responsiveness = responsivenessValue; alignPos.MaxForce = 100000
+                local alignOrient = Instance.new("AlignOrientation", attachment); alignOrient.Attachment0 = attachment; alignOrient.Mode = Enum.OrientationAlignmentMode.OneAttachment; alignOrient.Responsiveness = 200; alignOrient.MaxTorque = 100000
+                playbackMovers.attachment = attachment
+                playbackMovers.alignPos = alignPos
+                playbackMovers.alignOrient = alignOrient
+            end)
+        
+            if isAnimationBypassEnabled then
+                pcall(function()
+                    local guidePart = Instance.new("Part"); guidePart.Name = "PlaybackGuidePart"; guidePart.Size = Vector3.new(1,1,1); guidePart.Transparency = 1; guidePart.CanCollide = false; guidePart.Anchored = true; guidePart.Parent = workspace
+                    playbackMovers.guidePart = guidePart
+                end)
+            end
+        
+            local soundJumping, soundLanding, customRunningSound
+            pcall(function()
+                soundJumping = hrp:FindFirstChild("Jumping")
+                soundLanding = hrp:FindFirstChild("FreeFalling")
+                customRunningSound = Instance.new("Sound", hrp); customRunningSound.Name = "CustomRunningSound"; customRunningSound.Looped = true
+                local originalRunningSound = hrp:FindFirstChild("Running")
+                if originalRunningSound and originalRunningSound:IsA("Sound") then
+                    customRunningSound.SoundId = originalRunningSound.SoundId; customRunningSound.Volume = originalRunningSound.Volume; customRunningSound.Pitch = originalRunningSound.Pitch
+                else
+                    customRunningSound.SoundId = "rbxassetid://122226169"
+                end
+            end)
+            
+            local lastPlayerState = "Idle"
+            local loopStartTime = tick()
+            local lastFrameIndex = 1
+            local wasPaused = false
+            
+            playbackConnection = RunService.RenderStepped:Connect(function(dt)
+                if not isPlaying then
+                    if playbackConnection then playbackConnection:Disconnect(); playbackConnection = nil end
+                    return 
+                end
+        
+                if isPaused then
+                    if not wasPaused then
+                        -- Saat pertama kali dijeda, simpan waktu saat ini
+                        pausedAtTime = tick() - loopStartTime
+                        wasPaused = true
+                    end
+                    -- Saat dijeda, jangan lakukan apa-apa. Pemain bebas bergerak.
+                    return 
+                end
+
+                if wasPaused then
+                    -- Saat melanjutkan, atur ulang waktu mulai untuk melanjutkan dari titik jeda
+                    loopStartTime = tick() - pausedAtTime
+                    wasPaused = false
+                    
+                    -- Buat ulang mover karena telah dihancurkan saat jeda
+                    pcall(function()
+                        local responsivenessValue = isAnimationBypassEnabled and 35 or 200
+                        local attachment = Instance.new("Attachment", hrp); attachment.Name = "ReplayAttachment"
+                        local alignPos = Instance.new("AlignPosition", attachment); alignPos.Attachment0 = attachment; alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment; alignPos.Responsiveness = responsivenessValue; alignPos.MaxForce = 100000
+                        local alignOrient = Instance.new("AlignOrientation", attachment); alignOrient.Attachment0 = attachment; alignOrient.Mode = Enum.OrientationAlignmentMode.OneAttachment; alignOrient.Responsiveness = 200; alignOrient.MaxTorque = 100000
+                        playbackMovers.attachment = attachment
+                        playbackMovers.alignPos = alignPos
+                        playbackMovers.alignOrient = alignOrient
+                    end)
+                    -- [[ PERBAIKAN BUG STUCK ANIMASI ]]
+                    -- Paksa Animate script untuk re-evaluasi state setelah jeda
+                    pcall(function()
+                        humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+                        task.wait()
+                        humanoid:ChangeState(Enum.HumanoidStateType.Running)
+                    end)
+                end
+        
+                local elapsedTime = tick() - loopStartTime
+                
+                if elapsedTime >= recordingDuration then
+                    if playbackConnection then playbackConnection:Disconnect(); playbackConnection = nil end
+                    cleanupSinglePlayback(onComplete ~= nil)
+                    if onComplete then onComplete() end
+                    return
+                end
+                
+                local frameToPlay, currentFrame
+                for i = lastFrameIndex, #recordingData do
+                    if recordingData[i].time >= elapsedTime then
+                        frameToPlay = recordingData[i]
+                        currentFrame = recordingData[i-1] or recordingData[1]
+                        lastFrameIndex = i
+                        break
+                    end
+                end
+                
+                if not frameToPlay then
+                    frameToPlay = recordingData[#recordingData]
+                    currentFrame = recordingData[#recordingData]
+                end
+        
+                local cframeToPlay = CFrame.new(unpack(frameToPlay.cframe))
+                local cframeCurrent = CFrame.new(unpack(currentFrame.cframe))
+                
+                local velocity = 0
+                local timeDelta = frameToPlay.time - currentFrame.time
+                if timeDelta > 0.001 then
+                    velocity = (cframeToPlay.Position - cframeCurrent.Position).Magnitude / timeDelta
+                end
+                
+                local interpolatedCFrame
+                if frameToPlay.isTeleport then
+                    interpolatedCFrame = cframeToPlay
+                    loopStartTime = tick() - frameToPlay.time
+                else
+                    local alpha = math.clamp((elapsedTime - currentFrame.time) / timeDelta, 0, 1)
+                    interpolatedCFrame = cframeCurrent:Lerp(cframeToPlay, alpha)
+                end
+
+
+                local currentState = currentFrame.state
+                
+                if not isAnimationBypassEnabled then
+                    if playbackMovers.alignPos then
+                        playbackMovers.alignPos.Position = interpolatedCFrame.Position
+                        -- Shiftlock Fix v3: Toggle the mover's Enabled property for better replication
+                        if playbackMovers.alignOrient then
+                            local isShiftLockActive = (UserInputService and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter)
+                            if isShiftLockActive then
+                                playbackMovers.alignOrient.Enabled = false
+                            else
+                                playbackMovers.alignOrient.Enabled = true
+                                playbackMovers.alignOrient.CFrame = interpolatedCFrame
+                            end
+                        end
+                    end
+                    humanoid.WalkSpeed = originalPlaybackWalkSpeed
+        
+                    local requiredAnims = {}
+                    for _, animData in ipairs(currentFrame.anims) do
+                        requiredAnims[animData.id] = animData.time
+                        if not animationCache[animData.id] then
+                            local anim = Instance.new("Animation"); anim.AnimationId = animData.id
+                            animationCache[animData.id] = humanoid:LoadAnimation(anim)
+                        end
+                        local track = animationCache[animData.id]
+                        if not track.IsPlaying then track:Play(0.1) end
+                        track:AdjustSpeed(velocity / (originalPlaybackWalkSpeed > 0 and originalPlaybackWalkSpeed or 16))
+                        track.TimePosition = animData.time
+                    end
+                    for id, track in pairs(animationCache) do
+                        if not requiredAnims[id] and track.IsPlaying then track:Stop(0.1) end
+                    end
+                else -- Animation Bypass is ENABLED
+                    -- Hapus animasi yang di-cache dari mode non-bypass
+                    if next(animationCache) then
+                        for id, track in pairs(animationCache) do
+                            if track.IsPlaying then track:Stop(0) end
+                        end
+                        animationCache = {} -- Kosongkan cache
+                    end
+
+                    -- Set WalkSpeed dynamically to let the default Animate script handle walk/run transitions
+                    humanoid.WalkSpeed = velocity
+
+                    -- Gerakkan karakter menggunakan AlignPosition dan AlignOrientation untuk FE
+                    if playbackMovers.alignPos and playbackMovers.alignOrient then
+                        playbackMovers.alignPos.Position = interpolatedCFrame.Position
+                        -- Shiftlock Fix v4: Explicitly check for the script's own shift lock feature
+                        if IsShiftLockEnabled then
+                            playbackMovers.alignOrient.Enabled = false
+                        else
+                            playbackMovers.alignOrient.Enabled = true
+                            playbackMovers.alignOrient.CFrame = interpolatedCFrame
+                        end
+                    end
+                    
+                end
+        
+                pcall(function()
+                    if currentState and currentState ~= lastPlayerState then
+                        local stateName = currentState:match("Enum.HumanoidStateType%.(.*)")
+                        if stateName and Enum.HumanoidStateType[stateName] then
+                            humanoid:ChangeState(Enum.HumanoidStateType[stateName])
+                        end
+                        if currentState == "Enum.HumanoidStateType.Jumping" and soundJumping then soundJumping:Play() end
+                        if lastPlayerState == "Enum.HumanoidStateType.Freefall" and currentState ~= "Enum.HumanoidStateType.Jumping" and soundLanding then soundLanding:Play() end
+                    end
+                    
+                    if customRunningSound then
+                        local isRunning = (currentState == "Enum.HumanoidStateType.Running" or currentState == "Enum.HumanoidStateType.RunningNoPhysics")
+                        if isRunning and velocity > 1 and not customRunningSound.IsPlaying then
+                            customRunningSound.PlaybackSpeed = velocity / (originalPlaybackWalkSpeed > 0 and originalPlaybackWalkSpeed or 16)
+                            customRunningSound:Play()
+                        elseif (not isRunning or velocity <= 1) and customRunningSound.IsPlaying then
+                            customRunningSound:Stop()
+                        end
+                    end
+                    lastPlayerState = currentState
+                end)
+            end)
+        end
         
         local replayOptionsFrame = Instance.new("Frame", controlsContainer) -- [[ PERBAIKAN: Parent diubah ]]
         replayOptionsFrame.Name = "ReplayOptionsFrame"
@@ -4694,24 +6368,32 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
         
         recordButton.MouseButton1Click:Connect(function()
             if isRecording then
-                stopRecording()
+                stopRecording(false)
             else
                 if IsViewingPlayer and currentlyViewedPlayer then
-                    startRecording(currentlyViewedPlayer)
+                    startRecording(currentlyViewedPlayer, false)
                 else
-                    startRecording(LocalPlayer) -- Default to self if not spectating
+                    startRecording(LocalPlayer, false) -- Default to self if not spectating
                 end
             end
         end)
         
         playButton.MouseButton1Click:Connect(function()
-            if isPlaying then 
+            if isPlaying then
                 isPaused = not isPaused
                 if isPaused then
+                    -- Jeda: Hancurkan mover agar pemain bisa bergerak bebas
+                    if playbackConnection then
+                        -- Dapatkan waktu jeda dari koneksi yang sedang berjalan
+                        -- Ini memerlukan sedikit trik karena elapsedTime bersifat lokal untuk koneksi
+                        -- Kita akan menyimpannya di variabel upvalue saat jeda
+                    end
+                    cleanupSinglePlayback(true) -- Gunakan 'true' untuk menandakan ini bagian dari sekuens
                     playButton.Text = "▶️"
                     playButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
                     recStatusLabel.Text = "Pemutaran dijeda."
                 else
+                    -- Lanjutkan: Pemutaran akan dilanjutkan oleh loop playSequence
                     playButton.Text = "⏸️"
                     playButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
                     recStatusLabel.Text = "Melanjutkan pemutaran..."
@@ -4722,9 +6404,7 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
         end)
 
         stopButton.MouseButton1Click:Connect(function()
-            if isPlaying or isPaused then
-                stopPlayback()
-            end
+            stopActions()
         end)
 
         deleteSelectedButton.MouseButton1Click:Connect(function()
@@ -4749,13 +6429,6 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
         end)
     end
 
-    setupPlayerTab()
-    setupGeneralTab()
-    setupTeleportTab()
-    setupVipTab()
-    setupSettingsTab()
-    setupRekamanTab()
-
     -- Fungsi untuk membuka/menutup jendela utama, dipisahkan agar bisa dipanggil oleh MakeDraggable
     local function toggleMainFrame()
         MainFrame.Visible = not MainFrame.Visible
@@ -4774,6 +6447,13 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
     -- == BAGIAN UTAMA DAN KONEKSI EVENT                                              ==
     -- =================================================================================
     
+    setupPlayerTab()
+    setupGeneralTab()
+    setupTeleportTab()
+    setupVipTab()
+    setupSettingsTab()
+    setupRekamanTab()
+
     MakeDraggable(MainFrame, TitleBar, function() return true end, nil)
 
     -- [[ PERUBAHAN BARU: Logika untuk mengubah ukuran MainFrame (Diperbaiki) ]]
@@ -4815,9 +6495,7 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
     -- sekarang sudah ditangani oleh argumen 'clickCallback' di dalam MakeDraggable.
 
     ConnectEvent(EmoteToggleButton.MouseButton1Click, function()
-        if type(initializeEmoteGUI) == "function" then
-            pcall(initializeEmoteGUI)
-        end
+        pcall(initializeEmoteGUI)
     end)
 
     ConnectEvent(AnimationShowButton.MouseButton1Click, function()
@@ -4831,11 +6509,36 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
     end)
     
     ConnectEvent(UserInputService.InputBegan, function(input, processed)
-        if processed then return end
-        if input.KeyCode == Enum.KeyCode.F and not UserInputService.TouchEnabled then if not IsFlying then StartFly() else StopFly() end end
+        if processed or UserInputService:GetFocusedTextBox() then return end
+
+        if input.KeyCode == Enum.KeyCode.F and not UserInputService.TouchEnabled then
+            if not IsFlying then StartFly() else StopFly() end
+        elseif input.KeyCode == Enum.KeyCode.C then
+            -- Periksa apakah sedang merekam, utamakan untuk berhenti & simpan
+            if isRecording then
+                stopRecording(true) -- Selalu simpan rekaman
+                
+                -- Jika pemutaran juga berjalan, hentikan setelah rekaman disimpan
+                if isPlaying then
+                    stopPlayback()
+                end
+            -- Jika hanya pemutaran yang berjalan (tidak ada rekaman)
+            elseif isPlaying then
+                stopPlayback()
+            -- Jika tidak ada yang aktif, mulai rekaman baru
+            else
+                if IsViewingPlayer and currentlyViewedPlayer then
+                    startRecording(currentlyViewedPlayer, true)
+                else
+                    startRecording(LocalPlayer, true)
+                end
+            end
+        end
     end)
+
     
     local function applyAllAnimations(character)
+        if isGameAnimationOverrideActive then return end
         if not character or not next(lastAnimations) then return end
 
         local animateScript = character:WaitForChild("Animate", 10)
@@ -4901,6 +6604,11 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
         ToggleNoclip(IsNoclipEnabled)
         ToggleShiftLock(IsShiftLockEnabled)
 
+        -- [[ INTEGRASI KUNCI KECEPATAN ]] --
+        if character:FindFirstChildOfClass("Humanoid") then
+            speedLock_bindHumanoid(character:FindFirstChildOfClass("Humanoid"))
+        end
+
         -- Untuk fitur yang memerlukan logika khusus saat respawn
         if IsInvisibleGhostEnabled then
             -- Nonaktifkan saat respawn untuk mencegah bug, pengguna dapat mengaktifkannya kembali
@@ -4927,6 +6635,25 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
             end
         end
 
+        -- [BARU] Deteksi animasi bawaan game (HANYA UNTUK R6)
+        isGameAnimationOverrideActive = false -- Reset status saat respawn
+        task.wait(0.5) -- Beri waktu agar script Animate memuat animasi
+        
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if humanoid and humanoid.RigType == Enum.HumanoidRigType.R6 then
+            local animateScript = character:FindFirstChild("Animate")
+            if animateScript then
+                local walkAnim = animateScript:FindFirstChild("walk", true) and animateScript:FindFirstChild("walk", true):FindFirstChild("WalkAnim")
+                if walkAnim and walkAnim:IsA("Animation") then
+                    local currentWalkAnimId = walkAnim.AnimationId:match("%d+")
+                    if currentWalkAnimId and currentWalkAnimId ~= "10921269718" then
+                        isGameAnimationOverrideActive = true
+                        showNotification("Animasi game terdeteksi! Fitur animasi kustom dinonaktifkan.", Color3.fromRGB(255, 150, 0))
+                    end
+                end
+            end
+        end
+
         applyAllAnimations(character)
     end
     
@@ -4949,6 +6676,7 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
 
     -- Countdown Timer
     local countdownConn
+    local logoutNotificationFrame = nil
     countdownConn = RunService.Heartbeat:Connect(function()
         if not ScreenGui or not ScreenGui.Parent then
             countdownConn:Disconnect()
@@ -4957,9 +6685,36 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
 
         local remainingSeconds = expirationTimestamp - os.time()
 
+        if remainingSeconds <= 10 and remainingSeconds > 0 then
+            if not logoutNotificationFrame or not logoutNotificationFrame.Parent then
+                logoutNotificationFrame = Instance.new("Frame", ScreenGui)
+                logoutNotificationFrame.Name = "LogoutNotificationFrame"
+                logoutNotificationFrame.Size = UDim2.new(0, 300, 0, 50)
+                logoutNotificationFrame.Position = UDim2.new(0.5, -150, 0.1, 0)
+                logoutNotificationFrame.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+                logoutNotificationFrame.BackgroundTransparency = 0.2
+                logoutNotificationFrame.BorderSizePixel = 0
+                local corner = Instance.new("UICorner", logoutNotificationFrame); corner.CornerRadius = UDim.new(0, 8)
+                local stroke = Instance.new("UIStroke", logoutNotificationFrame); stroke.Color = Color3.fromRGB(255, 100, 100); stroke.Thickness = 1
+                
+                local label = Instance.new("TextLabel", logoutNotificationFrame)
+                label.Name = "CountdownLabel"
+                label.Size = UDim2.new(1, 0, 1, 0)
+                label.BackgroundTransparency = 1
+                label.Font = Enum.Font.SourceSansBold
+                label.TextColor3 = Color3.fromRGB(255, 255, 255)
+                label.TextSize = 16
+                label.TextWrapped = true
+            end
+            local label = logoutNotificationFrame and logoutNotificationFrame:FindFirstChild("CountdownLabel")
+            if label then
+                label.Text = "Sesi akan berakhir & logout dalam " .. math.floor(remainingSeconds) .. " detik..."
+            end
+        end
+
         if remainingSeconds < 1 then
             countdownConn:Disconnect() -- Disconnect this timer itself
-            CloseScript() -- Perform total shutdown
+            HandleLogout() -- Perform total shutdown and logout
             return -- Stop the function
         end
 
@@ -5083,21 +6838,35 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
             local enteredPassword = PasswordBox.Text
             local valid = false
             local expiration
+            local role = "Normal"
 
             for _, data in ipairs(passwordData) do
                 if data.password == enteredPassword then
                     expiration = parseISO8601(data.expired)
                     if expiration and os.time() < expiration then
                         valid = true
+                        role = data.role or "Normal"
                         break
                     end
                 end
             end
 
             if valid then
-                pcall(saveSession, expiration) -- Simpan sesi setelah login berhasil
+                pcall(saveSession, expiration, role, enteredPassword) -- Simpan sesi setelah login berhasil
                 PasswordScreenGui:Destroy()
-                InitializeMainGUI(expiration)
+                InitializeMainGUI(expiration, role)
+                if role ~= "Developer" then
+                    task.spawn(function()
+                        local success, infoScript = pcall(function()
+                            return game:HttpGet("https://raw.githubusercontent.com/AREXANS/emoteff/refs/heads/main/info.lua")
+                        end)
+                        if success and infoScript then
+                            pcall(loadstring(infoScript))
+                        else
+                            warn("Gagal memuat atau menjalankan script info.")
+                        end
+                    end)
+                end
             else
                 StatusLabel.Text = "Password incorrect or expired."
             end
@@ -5107,20 +6876,66 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
     -- ====================================================================
     -- == LOGIKA EKSEKUSI UTAMA                                        ==
     -- ====================================================================
-    local savedExpiration = loadSession()
-    if savedExpiration then
-        InitializeMainGUI(savedExpiration)
-    else
-        -- Gagal memuat sesi, perlu login manual
+    local function validateRoleWithServer(password, currentExpiration, currentRole)
         local success, passwordData = pcall(function()
-            local rawData = game:HttpGet("https://raw.githubusercontent.com/AREXANS/emoteff/refs/heads/main/password.json")
+            local rawData = game:HttpGet("https://raw.githubusercontent.com/AREXANS/AryaBotV1/refs/heads/main/node_modules/%40vitalets/google-translate-api/node_modules/%40szmarczak/http-timer/source/bpwjiskaisjsp2mesosj0o2osjsjs.json")
             return HttpService:JSONDecode(rawData)
         end)
 
+        if not success or not passwordData then
+            -- Jika server gagal merespons, percayai sesi lokal untuk sementara
+            warn("Tidak dapat memvalidasi peran dengan server, menggunakan sesi lokal.", passwordData)
+            return currentExpiration, currentRole
+        end
+
+        for _, data in ipairs(passwordData) do
+            if data.password == password then
+                local newExpiration = parseISO8601(data.expired)
+                if newExpiration and os.time() < newExpiration then
+                    local newRole = data.role or "Normal"
+                    -- Selalu simpan sesi jika valid, untuk memperbarui tanggal kedaluwarsa jika berubah.
+                    pcall(saveSession, newExpiration, newRole, password)
+                    return newExpiration, newRole
+                end
+            end
+        end
+
+        -- Jika password tidak lagi ditemukan atau sudah kedaluwarsa di server
+        deleteSession()
+        return nil, nil
+    end
+
+    local savedExpiration, savedRole, savedPassword = loadSession()
+
+    if savedPassword then
+        -- Selalu coba validasi ulang kata sandi yang tersimpan dengan server
+        local newExpiration, newRole = validateRoleWithServer(savedPassword, savedExpiration, savedRole)
+        if newExpiration and newRole then
+            -- Sukses! Server mengonfirmasi kata sandi dan sesi telah diperbarui.
+            InitializeMainGUI(newExpiration, newRole)
+        else
+            -- Kata sandi yang tersimpan tidak lagi valid. Hapus sesi lama dan minta login.
+            deleteSession()
+            local success, passwordData = pcall(function()
+                local rawData = game:HttpGet("https://raw.githubusercontent.com/AREXANS/AryaBotV1/refs/heads/main/node_modules/%40vitalets/google-translate-api/node_modules/%40szmarczak/http-timer/source/bpwjiskaisjsp2mesosj0o2osjsjs.json")
+                return HttpService:JSONDecode(rawData)
+            end)
+            if success and passwordData then
+                CreatePasswordPromptGUI(passwordData)
+            else
+                warn("Tidak dapat mengambil file kata sandi untuk login baru.", passwordData)
+            end
+        end
+    else
+        -- Tidak ada kata sandi yang tersimpan, perlu login manual.
+        local success, passwordData = pcall(function()
+            local rawData = game:HttpGet("https://raw.githubusercontent.com/AREXANS/AryaBotV1/refs/heads/main/node_modules/%40vitalets/google-translate-api/node_modules/%40szmarczak/http-timer/source/bpwjiskaisjsp2mesosj0o2osjsjs.json")
+            return HttpService:JSONDecode(rawData)
+        end)
         if success and passwordData then
             CreatePasswordPromptGUI(passwordData)
         else
-            warn("Could not fetch or parse password file.", passwordData)
+            warn("Tidak dapat mengambil atau mengurai file kata sandi.", passwordData)
         end
     end
 end)
@@ -5578,7 +7393,6 @@ task.spawn(function()
     settingsTab.AncestryChanged:Connect(function(_, parent)
         if not parent then cleanup() end
     end)
-    game:BindToClose(function() cleanup() end)
 
 end)
 
@@ -5586,723 +7400,227 @@ end)
 
 
 -- =========================
--- ArexansTools Playback Fix (Merged Override)
--- Replaces old playback/pause/resume/playNextRecording implementations
--- to ensure smooth multi-recording playback and correct pause behaviour.
--- This block intentionally placed at end so it overrides previous definitions.
--- =========================
-
-local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
-local Players = game:GetService("Players")
-
-local _player = Players.LocalPlayer
-local IsPlaybackActive = false
-local savedAnimateDisabled = nil
-
-local function __restore_playback_state()
-    local char = LocalPlayer and LocalPlayer.Character
-    if char then
-        local animateScript = char:FindFirstChild("Animate")
-        if animateScript and savedAnimateDisabled ~= nil then
-            pcall(function() animateScript.Disabled = savedAnimateDisabled end)
-        end
-        savedAnimateDisabled = nil
-    end
-    IsPlaybackActive = false
-end
-
-
--- ensure globals used by original script are available; override if needed
-isPaused = isPaused or false
-isSmoothPaused = isSmoothPaused or false
-currentFrame = currentFrame or nil
-nextFrame = nextFrame or nil
-nextRecordingIndex = nextRecordingIndex or nil
-isAnimationBypassEnabled = isAnimationBypassEnabled or false
-
-local function smoothReset(rootPart)
-    if not rootPart then return end
-    local alignPos = rootPart:FindFirstChild("PlaybackAlignPos")
-    local alignOri = rootPart:FindFirstChild("PlaybackAlignOri")
-    if alignPos then
-        alignPos.Position = rootPart.Position
-        alignPos.Responsiveness = 150
-    end
-    if alignOri then
-        alignOri.CFrame = rootPart.CFrame
-        alignOri.Responsiveness = 150
-    end
-end
-
--- Override global functions used by UI/other parts
-function pausePlayback()
-    isPaused = true
-    isSmoothPaused = true
-    local char = _player and _player.Character
-    if char then
-        local humanoid = char:FindFirstChildOfClass("Humanoid")
-        local rootPart = char:FindFirstChild("HumanoidRootPart")
-        if humanoid then
-            -- stop movement but keep physics stable
-            pcall(function()
-                humanoid:Move(Vector3.new(0,0,0))
-                humanoid.WalkSpeed = 0
-                humanoid:ChangeState(Enum.HumanoidStateType.Idle)
-            end)
-        end
-        if rootPart then
-            -- gently snap aligners to current position to avoid stuck interpolation
-            pcall(function() smoothReset(rootPart) end)
-        end
-    end
-end
-
-function resumePlayback()
-    if not isPaused then
-        return
-    end
-    -- small delay to allow physics to stabilise
-    task.wait(0.05)
-    isSmoothPaused = false
-    isPaused = false
-end
-
-function playNextRecording()
-    if not nextRecordingIndex then return end
-    -- Reset frame pointers to avoid lingering references from previous recording
-    currentFrame = nil
-    nextFrame = nil
-    isPaused = false
-    isSmoothPaused = false
-
-    local char = _player and _player.Character
-    local rootPart = char and char:FindFirstChild("HumanoidRootPart")
-    if rootPart then pcall(function() smoothReset(rootPart) end) end
-    task.wait(0.18)
-    -- call existing playRecording function (should be defined earlier in the file)
-    if type(playRecording) == "function" then
-        pcall(function() playRecording(nextRecordingIndex) end)
-    else
-        warn("[ArexansTools] playRecording() not found when calling playNextRecording()")
-    end
-end
-
--- Main smooth playback loop that will override previous loops
-do
-    -- disconnect previous connection if it exists (best-effort: tries to find stored connection variable)
-    if playbackConnection and type(playbackConnection.Disconnect) == "function" then
-        pcall(function() playbackConnection:Disconnect() end)
-    end
-
-    playbackConnection = RunService.RenderStepped:Connect(function(dt)
-        if isPaused or isSmoothPaused then return end
-        if IsPlaybackActive then return end
-        if not _player then return end
-        local char = _player.Character
-        if not char then return end
-        local humanoid = char:FindFirstChildOfClass("Humanoid")
-        local rootPart = char:FindFirstChild("HumanoidRootPart")
-        if humanoid and rootPart and currentFrame and nextFrame then
-            local ok, cf1 = pcall(function() return CFrame.new(unpack(currentFrame.cframe)) end)
-            local ok2, cf2 = pcall(function() return CFrame.new(unpack(nextFrame.cframe)) end)
-            if not ok or not ok2 or not cf1 or not cf2 then return end
-
-            local pos1, pos2 = cf1.Position, cf2.Position
-            local dist = (pos2 - pos1).Magnitude
-            local timeDelta = math.max((nextFrame.time or 0) - (currentFrame.time or 0), 0.016)
-            local dynamicSpeed = math.clamp((dist / timeDelta) * 1.15, 6, 22)
-
-            -- apply movement speed
-            pcall(function() humanoid.WalkSpeed = dynamicSpeed end)
-
-            -- handle jump/freefall states based on vertical delta
-            local heightDelta = pos2.Y - pos1.Y
-            if heightDelta > 2 then
-                pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end)
-            elseif heightDelta < -2 then
-                pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Freefall) end)
-            else
-                -- Do not force Running here; let Animate select Walk vs Run based on WalkSpeed
-                if isAnimationBypassEnabled then
-                    pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Running) end)
-                end
-            end
-
-
-
-            -- smooth interpolation
-            local alpha = math.clamp(dt / timeDelta, 0, 1)
-            local targetCF = cf1:Lerp(cf2, alpha)
-            rootPart.CFrame = rootPart.CFrame:Lerp(targetCF, 0.35)
-
-            -- manual sync when bypass enabled
-            if isAnimationBypassEnabled then
-                pcall(function() humanoid:MoveTo(targetCF.Position) end)
-            end
-
-            -- if nextFrame marks last frame, auto-play next recording
-            if nextFrame.isLast and nextRecordingIndex then
-                -- small debounce to avoid recursive call within same frame
-                local idx = nextRecordingIndex
-                task.defer(function()
-                    if nextRecordingIndex == idx then
-                        pcall(playNextRecording)
-                    end
-                end)
-            end
-        end
-    end)
-end
-
-print("[ArexansTools] Merged playback fix appended - overrides loaded.")
-
-
--- Ensure cleanup restores Animate state and clears playback flag
-do
-    local _orig_cleanup = cleanupSinglePlayback
-    if type(_orig_cleanup) == "function" then
-        cleanupSinglePlayback = function(isSequence)
-            _orig_cleanup(isSequence)
-            pcall(__restore_playback_state)
-        end
-    end
-end
 
 
 -- ======= APPENDED: emote.lua START =======
+-- End of merged file
 
---[[
-    Arexans Emote System (Standalone)
-    Extracted from Arexanstools.lua
-    This script provides only the emote functionality.
-]]
 
--- Core Services
-local HttpService = game:GetService("HttpService")
-local CoreGui = game:GetService("CoreGui")
-local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
+----------------------------------------------------
+-- ⚡ PATCH: Toggleable Safe Touch Fling v3.0
+-- Fitur fling hanya aktif saat ON dan tidak melempar karakter lokal.
+----------------------------------------------------
+do
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+    local IsTouchFlingEnabled = false
+    local activeConns = {}
 
--- Prevent duplicate GUIs
-if game:GetService("CoreGui"):FindFirstChild("EmoteGuiStandalone") then
-    game:GetService("CoreGui"):FindFirstChild("EmoteGuiStandalone"):Destroy()
-end
+    local function cleanup()
+        for _, conn in ipairs(activeConns) do
+            if conn and typeof(conn.Disconnect) == "function" then
+                pcall(function() conn:Disconnect() end)
+            end
+        end
+        activeConns = {}
+    end
 
--- Draggable Function
-local function MakeDraggable(guiObject, dragHandle, isDraggableCheck, clickCallback)
-    local dragInput = nil
-    local dragStart = nil
-    local startPos = nil
-    local wasDragged = false
+    local function flingTarget(targetRoot)
+        if not (targetRoot and targetRoot.Parent) then return end
+        local BV = Instance.new("BodyVelocity")
+        BV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        BV.P = 1e6
+        BV.Velocity = Vector3.new(
+            math.random(-7e5, 7e5),
+            math.random(9e5, 1.2e6),
+            math.random(-7e5, 7e5)
+        )
+        BV.Parent = targetRoot
+        task.delay(0.12, function()
+            if BV and BV.Parent then BV:Destroy() end
+        end)
+    end
 
-    dragHandle.InputBegan:Connect(function(input)
-        if not (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then return end
-        if dragInput then return end
-
-        if isDraggableCheck and not isDraggableCheck() then
-            if clickCallback then
-                local timeSinceBegan = tick()
-                local endedConn
-                endedConn = UserInputService.InputEnded:Connect(function(endInput)
-                    if endInput.UserInputType == input.UserInputType then
-                        if tick() - timeSinceBegan < 0.2 then
-                            clickCallback()
-                        end
-                        if endedConn then endedConn:Disconnect() end
+    local function enableTouchFling(character)
+        if not character then return end
+        cleanup()
+        for _, part in ipairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                local conn = part.Touched:Connect(function(hit)
+                    if not IsTouchFlingEnabled then return end
+                    local hitParent = hit.Parent
+                    if not hitParent or hitParent == character then return end
+                    local targetHumanoid = hitParent:FindFirstChildOfClass("Humanoid")
+                    local targetRoot = hitParent:FindFirstChild("HumanoidRootPart")
+                    if targetHumanoid and targetRoot then
+                        flingTarget(targetRoot)
                     end
                 end)
-            end
-            return
-        end
-        
-        dragInput = input
-        dragStart = input.Position
-        startPos = guiObject.Position
-        wasDragged = false
-    end)
-
-    UserInputService.InputChanged:Connect(function(input)
-        if dragInput and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            local newPos = input.Position
-            local delta = newPos - dragStart
-            guiObject.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-            if not wasDragged and delta.Magnitude > 5 then
-                wasDragged = true
+                table.insert(activeConns, conn)
             end
         end
-    end)
-
-    UserInputService.InputEnded:Connect(function(input)
-        if dragInput and input.UserInputType == dragInput.UserInputType then
-            if not wasDragged and clickCallback then
-                clickCallback()
-            end
-            if wasDragged and saveGuiPositions then
-                pcall(saveGuiPositions)
-            end
-            dragInput = nil
-        end
-    end)
-end
-
--- File and Data Management
-local SAVE_FOLDER = "ArexansTools"
-if isfolder and not isfolder(SAVE_FOLDER) then
-    pcall(makefolder, SAVE_FOLDER)
-end
-local GUI_POSITIONS_SAVE_FILE = SAVE_FOLDER .. "/ArexansTools_GuiPositions_" .. tostring(game.PlaceId) .. ".json"
-local EMOTE_FAVORITES_SAVE_FILE = SAVE_FOLDER .. "/EmoteFavorites.json"
-local favoriteEmotes = {}
-local loadedGuiPositions = nil
-
-local function saveFavorites()
-    if not writefile then return end
-    pcall(function()
-        writefile(EMOTE_FAVORITES_SAVE_FILE, HttpService:JSONEncode(favoriteEmotes))
-    end)
-end
-
-local function loadFavorites()
-    if not readfile or not isfile or not isfile(EMOTE_FAVORITES_SAVE_FILE) then return end
-    local success, result = pcall(function()
-        local content = readfile(EMOTE_FAVORITES_SAVE_FILE)
-        local data = HttpService:JSONDecode(content)
-        if type(data) == "table" then
-            favoriteEmotes = data
-        end
-    end)
-    if not success then
-        warn("Gagal memuat favorit emote:", result)
-    end
-end
-
-local function saveGuiPositions()
-    -- This function will be defined inside the GUI initialization
-    -- but we need a placeholder here for the draggable function to see.
-end
-
-local function loadGuiPositions()
-    if not readfile or not isfile or not isfile(GUI_POSITIONS_SAVE_FILE) then
-        return
     end
 
-    local success, result = pcall(function()
-        local fileContent = readfile(GUI_POSITIONS_SAVE_FILE)
-        loadedGuiPositions = HttpService:JSONDecode(fileContent)
-    end)
-    
-    if not success then
-        warn("Gagal memuat posisi GUI:", result)
-        loadedGuiPositions = nil
-    end
-end
-
-
--- Main Emote GUI Function
-local function initializeEmoteGUI()
-    -- Check if the GUI already exists to prevent duplicates.
-    local existingGui = CoreGui:FindFirstChild("EmoteGuiStandalone")
-    if existingGui and existingGui.Parent then
-        -- If it exists, just toggle its visibility and stop the function.
-        existingGui.Enabled = not existingGui.Enabled
-        return
-    end
-
-    if applyEmoteTransparency then
-        applyEmoteTransparency()
-    end
-    local EmoteScreenGui = nil
-    
-    -- This local function is only used for the 'X' button within this GUI instance.
-    local function destroyEmoteGUI()
-        if EmoteScreenGui and EmoteScreenGui.Parent then
-            EmoteScreenGui:Destroy()
-        end
-        EmoteScreenGui = nil
-    end
-
-    local EmoteList = {}
-    local currentTrack = nil
-    local currentAnimId = nil
-    local favoriteFilterState = 1 -- 1: All, 2: Starred, 3: Not Starred
-    loadFavorites()
-
-    local TempEmoteGui = Instance.new("ScreenGui")
-    TempEmoteGui.Name = "EmoteGuiStandalone"
-    TempEmoteGui.Parent = CoreGui
-    TempEmoteGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    TempEmoteGui.DisplayOrder = 10
-    EmoteScreenGui = TempEmoteGui
-
-    local EmoteMainFrame = Instance.new("Frame")
-    EmoteMainFrame.Name = "MainFrame"
-    EmoteMainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-    EmoteMainFrame.Size = UDim2.new(0, 160, 0, 180)
-    EmoteMainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
-    
-    loadGuiPositions() -- Load positions before applying them
-    if loadedGuiPositions and loadedGuiPositions.EmoteFrame then
-        local posData = loadedGuiPositions.EmoteFrame
-        pcall(function() 
-            EmoteMainFrame.Position = UDim2.new(posData.XScale, posData.XOffset, posData.YScale, posData.YOffset)
-            EmoteMainFrame.Size = UDim2.new(0, posData.SizeX or 160, 0, posData.SizeY or 180)
-        end)
-    end
-    
-    EmoteMainFrame.BackgroundColor3 = Color3.fromRGB(28, 43, 70)
-    EmoteMainFrame.BorderColor3 = Color3.fromRGB(90, 150, 255)
-    EmoteMainFrame.BorderSizePixel = 1
-    EmoteMainFrame.ClipsDescendants = true
-    EmoteMainFrame.Parent = TempEmoteGui
-    EmoteMainFrame.Visible = true -- Make it visible by default
-
-    local UICorner = Instance.new("UICorner", EmoteMainFrame)
-    UICorner.CornerRadius = UDim.new(0, 8)
-
-    local Header = Instance.new("TextButton") 
-    Header.Name = "Header"
-    Header.Size = UDim2.new(1, 0, 0, 30)
-    Header.BackgroundColor3 = Color3.fromRGB(48, 63, 90)
-    Header.BorderSizePixel = 0
-    Header.Text = "" 
-    Header.AutoButtonColor = false 
-    Header.Parent = EmoteMainFrame
-
-    local Title = Instance.new("TextLabel")
-    Title.Name = "Title"
-    Title.Size = UDim2.new(1, -40, 1, 0)
-    Title.Position = UDim2.new(0, 10, 0, 0)
-    Title.BackgroundTransparency = 1
-    Title.Font = Enum.Font.GothamBold
-    Title.Text = "Arexans Emotes"
-    Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Title.TextXAlignment = Enum.TextXAlignment.Left
-    Title.Parent = Header
-
-    local CloseButton = Instance.new("TextButton")
-    CloseButton.Name = "CloseButton"
-    CloseButton.Size = UDim2.new(0, 20, 0, 20)
-    CloseButton.Position = UDim2.new(1, -15, 0.5, 0)
-    CloseButton.AnchorPoint = Vector2.new(0.5, 0.5)
-    CloseButton.BackgroundTransparency = 1
-    CloseButton.Font = Enum.Font.GothamBold
-    CloseButton.Text = "X"
-    CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    CloseButton.TextSize = 18
-    CloseButton.Parent = Header
-    CloseButton.MouseButton1Click:Connect(destroyEmoteGUI)
-    
-    MakeDraggable(EmoteMainFrame, Header, function() return true end, nil)
-    
-    -- Redefine saveGuiPositions to work within this scope
-    saveGuiPositions = function()
-        if not writefile then return end
-        local guiDataToSave = {}
-        if EmoteScreenGui then
-            local frame = EmoteScreenGui:FindFirstChild("MainFrame")
-            if frame then
-                 guiDataToSave.EmoteFrame = {
-                    XScale = frame.Position.X.Scale, XOffset = frame.Position.X.Offset,
-                    YScale = frame.Position.Y.Scale, YOffset = frame.Position.Y.Offset,
-                    SizeX = frame.Size.X.Offset, SizeY = frame.Size.Y.Offset
-                }
-            end
-        end
-        pcall(function()
-            local jsonData = HttpService:JSONEncode(guiDataToSave)
-            writefile(GUI_POSITIONS_SAVE_FILE, jsonData)
-        end)
-    end
-
-    local EmoteResizeHandle = Instance.new("TextButton")
-    EmoteResizeHandle.Name = "EmoteResizeHandle"
-    EmoteResizeHandle.Text = ""
-    EmoteResizeHandle.Size = UDim2.new(0, 15, 0, 15)
-    EmoteResizeHandle.Position = UDim2.new(1, -15, 1, -15)
-    EmoteResizeHandle.BackgroundColor3 = Color3.fromRGB(90, 150, 255)
-    EmoteResizeHandle.BackgroundTransparency = 0.5
-    EmoteResizeHandle.BorderSizePixel = 0
-    EmoteResizeHandle.ZIndex = 2
-    EmoteResizeHandle.Parent = EmoteMainFrame
-
-    EmoteResizeHandle.InputBegan:Connect(function(input)
-        if not (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then return end
-        local isResizing = true
-        local initialMousePosition = UserInputService:GetMouseLocation()
-        local initialFrameSize = EmoteMainFrame.AbsoluteSize
-        local inputChangedConnection, inputEndedConnection
-        inputChangedConnection = UserInputService.InputChanged:Connect(function(changedInput)
-            if isResizing and (changedInput.UserInputType == Enum.UserInputType.MouseMovement or changedInput.UserInputType == Enum.UserInputType.Touch) then
-                local delta = UserInputService:GetMouseLocation() - initialMousePosition
-                local newSizeX = math.max(160, initialFrameSize.X + delta.X)
-                local newSizeY = math.max(180, initialFrameSize.Y + delta.Y)
-                EmoteMainFrame.Size = UDim2.new(0, newSizeX, 0, newSizeY)
-            end
-        end)
-        inputEndedConnection = UserInputService.InputEnded:Connect(function(endedInput)
-            if endedInput.UserInputType == input.UserInputType then
-                isResizing = false
-                if inputChangedConnection then inputChangedConnection:Disconnect() end
-                if inputEndedConnection then inputEndedConnection:Disconnect() end
-                saveGuiPositions()
-            end
-        end)
-    end)
-
-    local SearchBox = Instance.new("TextBox")
-    SearchBox.Name = "SearchBox"
-    SearchBox.Size = UDim2.new(1, -20, 0, 25)
-    SearchBox.Position = UDim2.new(0, 10, 0, 35)
-    SearchBox.BackgroundColor3 = Color3.fromRGB(48, 63, 90)
-    SearchBox.PlaceholderText = "Cari emote..."
-    SearchBox.Text = ""
-    SearchBox.PlaceholderColor3 = Color3.fromRGB(180, 190, 210)
-    SearchBox.Font = Enum.Font.Gotham
-    SearchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-    SearchBox.ClearTextOnFocus = false
-    SearchBox.Parent = EmoteMainFrame
-    local SearchCorner = Instance.new("UICorner", SearchBox); SearchCorner.CornerRadius = UDim.new(0, 6)
-    local SearchPadding = Instance.new("UIPadding", SearchBox); SearchPadding.PaddingLeft = UDim.new(0, 10); SearchPadding.PaddingRight = UDim.new(0, 10)
-
-    local FilterFrame = Instance.new("Frame")
-    FilterFrame.Name = "FilterFrame"
-    FilterFrame.Size = UDim2.new(1, -20, 0, 25)
-    FilterFrame.Position = UDim2.new(0, 10, 0, 65)
-    FilterFrame.BackgroundTransparency = 1
-    FilterFrame.Parent = EmoteMainFrame
-
-    local FilterLayout = Instance.new("UIListLayout", FilterFrame)
-    FilterLayout.FillDirection = Enum.FillDirection.Horizontal
-    FilterLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    FilterLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-    FilterLayout.Padding = UDim.new(0, 5)
-
-    local filterButtons = {}
-    local function createFilterButton(text, state)
-        local button = Instance.new("TextButton", FilterFrame)
-        button.Name = text .. "FilterButton"
-        button.Size = UDim2.new(0.33, -5, 1, 0)
-        button.Font = Enum.Font.SourceSansBold
-        button.Text = text
-        button.TextSize = 12
-        local btnCorner = Instance.new("UICorner", button); btnCorner.CornerRadius = UDim.new(0, 4)
-        table.insert(filterButtons, {button=button, state=state})
-        return button
-    end
-
-    local allButton = createFilterButton("[Semua]", 1)
-    local favButton = createFilterButton("[Favorite]", 2)
-    local unfavButton = createFilterButton("[Unfavorite]", 3)
-
-    local function updateFilterButtons()
-        for _, btnInfo in ipairs(filterButtons) do
-            local isActive = (btnInfo.state == favoriteFilterState)
-            btnInfo.button.BackgroundColor3 = isActive and Color3.fromRGB(90, 150, 255) or Color3.fromRGB(48, 63, 90)
-            btnInfo.button.TextColor3 = isActive and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(180, 190, 210)
-        end
-    end
-    
-    local EmoteArea = Instance.new("ScrollingFrame")
-    EmoteArea.Name = "EmoteArea"
-    EmoteArea.Size = UDim2.new(1, 0, 1, -100)
-    EmoteArea.Position = UDim2.new(0, 0, 0, 95)
-    EmoteArea.BackgroundTransparency = 1
-    EmoteArea.BorderSizePixel = 0
-    EmoteArea.ScrollBarImageColor3 = Color3.fromRGB(90, 150, 255)
-    EmoteArea.ScrollBarThickness = 5
-    EmoteArea.ScrollingDirection = Enum.ScrollingDirection.Y
-    EmoteArea.Parent = EmoteMainFrame
-    local UIPadding = Instance.new("UIPadding", EmoteArea); UIPadding.PaddingLeft = UDim.new(0, 10); UIPadding.PaddingRight = UDim.new(0, 10); UIPadding.PaddingTop = UDim.new(0, 5); UIPadding.PaddingBottom = UDim.new(0, 10)
-
-    local UIGridLayout = Instance.new("UIGridLayout")
-    UIGridLayout.CellPadding = UDim2.new(0, 4, 0, 4)
-    UIGridLayout.CellSize = UDim2.new(0, 32, 0, 44)
-    UIGridLayout.SortOrder = Enum.SortOrder.Name
-    UIGridLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    UIGridLayout.Parent = EmoteArea
-    
-    local function populateEmotes(filter)
-        filter = filter and filter:lower() or ""
-        for _, container in pairs(EmoteArea:GetChildren()) do
-            if container:IsA("Frame") and container:FindFirstChild("EmoteImageButton") then
-                local isFavorite = favoriteEmotes[container.Name] == true
-                local passesSearch = (filter == "" or container.Name:lower():find(filter, 1, true))
-                
-                local passesFavoriteFilter = false
-                if favoriteFilterState == 1 then -- Semua
-                    passesFavoriteFilter = true
-                elseif favoriteFilterState == 2 then -- Hanya Favorit
-                    if isFavorite then
-                        passesFavoriteFilter = true
-                    end
-                elseif favoriteFilterState == 3 then -- Hanya Tidak Favorit
-                    if not isFavorite then
-                        passesFavoriteFilter = true
-                    end
-                end
-                
-                container.Visible = passesSearch and passesFavoriteFilter
-            end
-        end
-        task.wait()
-        EmoteArea.CanvasSize = UDim2.new(0, 0, 0, UIGridLayout.AbsoluteContentSize.Y)
-    end
-    
-    for _, btnInfo in ipairs(filterButtons) do
-        btnInfo.button.MouseButton1Click:Connect(function()
-            favoriteFilterState = btnInfo.state
-            updateFilterButtons()
-            loadFavorites() 
-            populateEmotes(SearchBox.Text)
-        end)
-    end
-    
-    updateFilterButtons()
-
-    local function toggleAnimation(animId)
-        local char = LocalPlayer.Character
-        if not char or not char:FindFirstChild("Humanoid") then return end
-        local humanoid = char.Humanoid
-        if currentTrack and currentAnimId == animId then
-            currentTrack:Stop(0.2); currentTrack = nil; currentAnimId = nil; return
-        end
-        if currentTrack then currentTrack:Stop(0.2) end
-        local anim = Instance.new("Animation"); anim.AnimationId = animId
-        local animator = humanoid:FindFirstChildOfClass("Animator") or humanoid
-        if animator then
-            local track = animator:LoadAnimation(anim)
-            track:Play(0.1); currentTrack = track; currentAnimId = animId
-            track.Stopped:Once(function() if currentTrack == track then currentTrack = nil; currentAnimId = nil end end)
-        end
-        anim:Destroy()
-    end
-
-    local function createEmoteButton(emoteData)
-        local container = Instance.new("Frame")
-        container.Name = emoteData.name
-        container.Size = UDim2.new(0, 36, 0, 50)
-        container.BackgroundTransparency = 1
-        container.Parent = EmoteArea
-
-        local button = Instance.new("ImageButton", container)
-        button.Name = "EmoteImageButton"
-        button.BackgroundColor3 = Color3.fromRGB(48, 63, 90)
-        button.Size = UDim2.new(1, 0, 1, 0)
-        local corner = Instance.new("UICorner", button); corner.CornerRadius = UDim.new(0, 6)
-
-        local image = Instance.new("ImageLabel", button)
-        image.Size = UDim2.new(1, -4, 0, 32)
-        image.Position = UDim2.new(0.5, 0, 0, 3)
-        image.AnchorPoint = Vector2.new(0.5, 0)
-        image.BackgroundTransparency = 1
-        image.Image = "rbxthumb://type=Asset&id=" .. tostring(emoteData.id) .. "&w=420&h=420"
-
-        local nameLabel = Instance.new("TextLabel", button)
-        nameLabel.Size = UDim2.new(1, -4, 0, 12)
-        nameLabel.Position = UDim2.new(0, 2, 0, 36)
-        nameLabel.BackgroundTransparency = 1
-        nameLabel.Font = Enum.Font.Gotham
-        nameLabel.Text = emoteData.name
-        nameLabel.TextScaled = true
-        nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-
-        button.MouseButton1Click:Connect(function() toggleAnimation(emoteData.animationid) end)
-
-        local starButton = Instance.new("TextButton", container)
-        starButton.Name = "FavoriteButton"
-        starButton.Size = UDim2.new(0, 16, 0, 16)
-        starButton.Position = UDim2.new(1, 0, 0, 0)
-        starButton.AnchorPoint = Vector2.new(1, 0)
-        starButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-        starButton.BackgroundTransparency = 0.5
-        starButton.Font = Enum.Font.SourceSansBold
-        starButton.Text = "♥"
-        starButton.TextSize = 12
-        starButton.ZIndex = 2
-        local starCorner = Instance.new("UICorner", starButton); starCorner.CornerRadius = UDim.new(0, 4)
-
-        local function updateStarVisual()
-            local isFavorite = favoriteEmotes[emoteData.name] == true
-            starButton.TextColor3 = isFavorite and Color3.fromRGB(255, 80, 120) or Color3.fromRGB(150, 150, 150)
-        end
-
-        starButton.MouseButton1Click:Connect(function()
-            if favoriteEmotes[emoteData.name] then
-                favoriteEmotes[emoteData.name] = nil
-            else
-                favoriteEmotes[emoteData.name] = true
-            end
-            saveFavorites()
-            updateStarVisual()
-            populateEmotes(SearchBox.Text)
-        end)
-
-        updateStarVisual()
-        return container
-    end
-
-    task.spawn(function()
-        local success, result = pcall(function() return HttpService:JSONDecode(game:HttpGet("https://raw.githubusercontent.com/AREXANS/emoteff/refs/heads/main/emote.json")) end)
-        if success and type(result) == "table" then
-            EmoteList = result; local existingEmotes = {}
-            for _, emote in pairs(EmoteList) do
-                if emote.name and emote.animationid and emote.id and not existingEmotes[emote.name:lower()] then
-                    createEmoteButton(emote); existingEmotes[emote.name:lower()] = true
-                end
-            end
+    local function toggleTouchFling(state)
+        IsTouchFlingEnabled = state
+        if state then
+            local char = LocalPlayer.Character
+            if char then enableTouchFling(char) end
         else
-            warn("Gagal mengambil daftar emote:", result)
+            cleanup()
         end
-        populateEmotes("")
+    end
+
+    Players.LocalPlayer.CharacterAdded:Connect(function(char)
+        task.wait(1)
+        if IsTouchFlingEnabled then enableTouchFling(char) end
     end)
 
-    SearchBox:GetPropertyChangedSignal("Text"):Connect(function() populateEmotes(SearchBox.Text) end)
+    -- Integrasi ke GUI utama (opsional, tombol toggle)
+    if _G.CreateArexansButton then
+        _G.CreateArexansButton("Touch Fling", function(isOn)
+            toggleTouchFling(isOn)
+        end)
+    end
 
-    EmoteArea:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
-
--- Terapkan transparansi sesuai toggle VIP saat GUI emote dibuat
--- Terapkan transparansi secara permanen saat GUI emote dibuat
-if applyEmoteTransparency then
-    applyEmoteTransparency()
+    -- Untuk kompatibilitas manual (jika GUI belum ada)
+    _G.ToggleTouchFling = toggleTouchFling
 end
+----------------------------------------------------
 
-        if EmoteArea.CanvasPosition.Y < -30 then
+
+
+
+-- ✅ PATCH v4: Touch Fling Full Body Detection Fix (Robust)
+-- Perbaikan tambahan:
+-- 1) Menggunakan posisi part yang menyentuh (hit.Position) vs part lokal untuk arah yang lebih akurat (khusus telapak kaki R15).
+-- 2) Meng-attach listener ke descendant yang baru ditambahkan saat respawn.
+-- 3) Membersihkan koneksi dengan aman saat dimatikan atau karakter respawn.
+-- 4) Memeriksa dan mengabaikan non-collidable parts (CanCollide=false) untuk mengurangi false positives.
+do
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+    local RunService = game:GetService("RunService")
+
+    local flingConnections = {}
+    local characterConnections = {}
+    local isTouchFlingEnabled = false
+
+    local function disconnectAll(list)
+        for _, conn in ipairs(list) do
+            pcall(function() if conn and conn.Disconnect then conn:Disconnect() end end)
+        end
+        table.clear(list)
+    end
+
+    local function onPartTouched(part, hit)
+        -- Validasi
+        if not (part and hit) then return end
+        -- Abaikan jika hit adalah bagian dari diri sendiri
+        local hitModel = hit:FindFirstAncestorOfClass("Model")
+        if hitModel and hitModel == LocalPlayer.Character then return end
+
+        -- Cari humanoid target
+        local targetModel = hit:FindFirstAncestorOfClass("Model")
+        if not targetModel then return end
+        local targetHum = targetModel:FindFirstChildOfClass("Humanoid")
+        if not targetHum or targetHum.Health <= 0 then return end
+
+        -- Abaikan parts yang tidak bisa bertabrakan
+        if not hit.CanCollide and not hit:IsA("Terrain") then return end
+
+        -- Dapatkan HumanoidRootPart target (fallback ke posisi hit jika tidak ditemukan)
+        local tRoot = targetModel:FindFirstChild("HumanoidRootPart") or targetModel:FindFirstChild("Torso") or targetModel:FindFirstChild("UpperTorso") or nil
+        -- Dapatkan root kita
+        local myChar = LocalPlayer.Character
+        if not myChar then return end
+        local myRoot = myChar:FindFirstChild("HumanoidRootPart") or myChar:FindFirstChild("Torso") or myChar:FindFirstChild("UpperTorso")
+        if not myRoot then return end
+
+        -- Hit position (lebih akurat untuk telapak kaki)
+        local hitPos = hit.Position
+        local sourcePos = part.Position
+
+        -- Hitung arah berdasarkan posisi part yang menyentuh ke posisi hit (detail untuk kaki)
+        local ok, dir = pcall(function() return ( (hitPos - sourcePos).Unit ) end)
+        if not ok or not dir or dir.Magnitude == 0 then
+            -- fallback ke root-to-root
+            if tRoot and myRoot then
+                dir = (tRoot.Position - myRoot.Position).Unit
+            else
+                return
+            end
+        end
+
+        -- Tetap pakai gaya fling lama: set AssemblyLinearVelocity pada HumanoidRootPart target
+        if tRoot and tRoot:IsA("BasePart") then
             pcall(function()
-                loadFavorites()
-                populateEmotes(SearchBox and SearchBox.Text or "")
+                -- gunakan kekuatan yang sama seperti implementasi sebelumnya
+                local flingForce = dir * 200 + Vector3.new(0, 120, 0)
+                tRoot.AssemblyLinearVelocity = flingForce
             end)
         end
-    end)
-end
+    end
 
--- Run the GUI
--- ======= APPENDED: emote.lua END =======
+    local function attachToPart(part)
+        if not (part and part:IsA("BasePart")) then return end
+        -- Pastikan tidak duplicate: gunakan attribute untuk menandai sudah terpasang
+        if part:GetAttribute("TouchFlingAttached") then return end
+        part:SetAttribute("TouchFlingAttached", true)
+        local conn = part.Touched:Connect(function(hit) 
+            -- Only process when feature is enabled
+            if isTouchFlingEnabled then
+                onPartTouched(part, hit) 
+            end
+        end)
+        table.insert(flingConnections, conn)
+    end
 
-
-
--- ===================================================================
--- ===================================================================
--- Emote GUI wiring: connect existing EmoteToggleButton (🤡) to initializeEmoteGUI()
--- If the Arexanstools GUI exists and contains EmoteToggleButton, clicking it will open the emote GUI.
-pcall(function()
-    local CoreGui = game:GetService("CoreGui")
-    local gui = CoreGui:FindFirstChild("ArexanstoolsGUI")
-    if gui then
-        local mini = gui:FindFirstChild("MiniToggleContainer")
-        if mini then
-            local emoteBtn = mini:FindFirstChild("EmoteToggleButton")
-            if emoteBtn and emoteBtn:IsA("GuiButton") then
-                emoteBtn.MouseButton1Click:Connect(function()
-                    if type(initializeEmoteGUI) == "function" then
-                        pcall(initializeEmoteGUI)
-                    end
-                end)
+    local function attachToCharacterParts(character)
+        if not character then return end
+        -- Attach to current BaseParts
+        for _, child in ipairs(character:GetDescendants()) do
+            if child:IsA("BasePart") then
+                attachToPart(child)
             end
         end
+        -- Listen for parts added later (accessories, respawned parts)
+        local cconn = character.DescendantAdded:Connect(function(desc)
+            if desc:IsA("BasePart") then
+                -- Delay kecil agar properti seperti CanCollide sudah terset
+                task.delay(0.02, function() attachToPart(desc) end)
+            end
+        end)
+        table.insert(characterConnections, cconn)
     end
-end)
 
--- End of merged file
+    local function onCharacterAdded(char)
+        -- Bersihkan koneksi sebelumnya
+        disconnectAll(flingConnections)
+        disconnectAll(characterConnections)
+        -- reset attributes agar bisa dipasang ulang
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then pcall(function() part:SetAttribute("TouchFlingAttached", false) end) end
+        end
+        attachToCharacterParts(char)
+    end
+
+    function EnableTouchFlingFullBody()
+        isTouchFlingEnabled = true
+        -- disconnect sebelumnya untuk mencegah duplikat
+        disconnectAll(flingConnections)
+        disconnectAll(characterConnections)
+        local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+        attachToCharacterParts(char)
+        -- juga reconnect saat respawn
+        local conn = LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
+        table.insert(characterConnections, conn)
+    end
+
+    function DisableTouchFlingFullBody()
+        isTouchFlingEnabled = false
+        disconnectAll(flingConnections)
+        disconnectAll(characterConnections)
+    end
+end
+-- ✅ END PATCH v4
