@@ -482,7 +482,34 @@ task.spawn(function()
         end)
     end
 
-    local function loadFavorites()
+-- [[ BARU: Fungsi untuk menyimpan animasi asli game ]]
+local function storeOriginalAnimations(character)
+    if not character then return end
+    local animateScript = character:FindFirstChild("Animate")
+    if not animateScript then return end
+
+    local function getAnimId(parent, animName)
+        local anim = parent and parent:FindFirstChild(animName)
+        return anim and anim:IsA("Animation") and anim.AnimationId or nil
+    end
+
+    originalGameAnimations = {
+        Idle = {
+            getAnimId(animateScript:FindFirstChild("idle"), "Animation1"),
+            getAnimId(animateScript:FindFirstChild("idle"), "Animation2")
+        },
+        Walk = getAnimId(animateScript:FindFirstChild("walk"), "WalkAnim"),
+        Run = getAnimId(animateScript:FindFirstChild("run"), "RunAnim"),
+        Jump = getAnimId(animateScript:FindFirstChild("jump"), "JumpAnim"),
+        Fall = getAnimId(animateScript:FindFirstChild("fall"), "FallAnim"),
+        Swim = getAnimId(animateScript:FindFirstChild("swim"), "Swim"),
+        SwimIdle = getAnimId(animateScript:FindFirstChild("swimidle"), "SwimIdle"),
+        Climb = getAnimId(animateScript:FindFirstChild("climb"), "ClimbAnim")
+    }
+end
+
+-- [[ BARU: Fungsi untuk mengunci animasi ]]
+local function startAnimationLock()
         if not readfile or not isfile or not isfile(EMOTE_FAVORITES_SAVE_FILE) then return end
         local success, result = pcall(function()
             local content = readfile(EMOTE_FAVORITES_SAVE_FILE)
@@ -748,6 +775,9 @@ task.spawn(function()
         isAnimationEnabled = false 
         AnimationScreenGui = nil
         local isGameAnimationOverrideActive = false -- [BARU] Lacak jika game menimpa animasi
+        local isAnimationLockEnabled = false -- [[ BARU ]] Untuk fitur kunci animasi
+        local animationLockConnection = nil -- [[ BARU ]] Koneksi untuk loop kunci animasi
+        local originalGameAnimations = {} -- [[ BARU ]] Untuk menyimpan animasi bawaan game
     
         -- Variabel Global untuk menyimpan animasi
         lastAnimations = {}
@@ -1343,7 +1373,8 @@ task.spawn(function()
             FlySpeedValue = Settings.FlySpeed,
             FEInvisibleTransparencyValue = Settings.FEInvisibleTransparency,
             SpeedLockEnabled = speedLock_isEnforced,
-            SpeedLockValue = speedLock_currentSpeed
+            SpeedLockValue = speedLock_currentSpeed,
+            AnimationLock = isAnimationLockEnabled -- [[ BARU ]]
         }
         
         pcall(function()
@@ -1383,6 +1414,7 @@ task.spawn(function()
                 Settings.FEInvisibleTransparency = decodedData.FEInvisibleTransparencyValue or 0.75
                 speedLock_isEnforced = decodedData.SpeedLockEnabled or false
                 speedLock_currentSpeed = decodedData.SpeedLockValue or 16
+                isAnimationLockEnabled = decodedData.AnimationLock or false -- [[ BARU ]]
             end
         end)
         if not success then
@@ -2295,29 +2327,8 @@ task.spawn(function()
                 end
                 -- [PERBAIKAN SELESAI]
                 
-                local function resetToRthroPack()
-                    local anims = Animations
-                    if anims.Idle["Rthro"] then setAnimation("Idle", anims.Idle["Rthro"]) end
-                    if anims.Walk["Rthro"] then setAnimation("Walk", anims.Walk["Rthro"]) end
-                    if anims.Run["Rthro"] then setAnimation("Run", anims.Run["Rthro"]) end
-                    if anims.Jump["Rthro"] then setAnimation("Jump", anims.Jump["Rthro"]) end
-                    if anims.Fall["Rthro"] then setAnimation("Fall", anims.Fall["Rthro"]) end
-                    if anims.SwimIdle["Rthro"] then setAnimation("SwimIdle", anims.SwimIdle["Rthro"]) end
-                    if anims.Swim["Rthro"] then setAnimation("Swim", anims.Swim["Rthro"]) end
-                    if anims.Climb["Rthro"] then setAnimation("Climb", anims.Climb["Rthro"]) end
-
-                    for animType, button in pairs(activeAnimationButtons) do
-                        if button and button.Parent then
-                            button.BackgroundColor3 = defaultButtonColor
-                        end
-                    end
-                    activeAnimationButtons = {}
-                    
-                    showNotification("Semua animasi direset ke Rthro Pack", Color3.fromRGB(50, 150, 255))
-                end
-
-                local resetButton = createTheButton("Reset Semua Animasi Rthro", resetToRthroPack)
-                resetButton.BackgroundColor3 = Color3.fromRGB(200, 70, 70)
+                local removeAnimButton = createTheButton("Hapus Animasi", restoreOriginalGameAnimations)
+                removeAnimButton.BackgroundColor3 = Color3.fromRGB(200, 70, 70)
 
                 local function resetToAdidasSport()
                     local anims = Animations
@@ -2581,6 +2592,91 @@ task.spawn(function()
             end
         end)
     end
+
+-- [[ BARU: Fungsi untuk mengembalikan animasi ke bawaan game ]]
+local function restoreOriginalGameAnimations()
+    if not next(originalGameAnimations) then
+        showNotification("Animasi asli game tidak tersimpan.", Color3.fromRGB(200, 150, 50))
+        return
+    end
+
+    local char = LocalPlayer.Character
+    if not char then return end
+
+    -- Matikan kunci animasi jika aktif
+    if isAnimationLockEnabled then
+        stopAnimationLock()
+    end
+    
+    -- Hapus animasi kustom yang tersimpan
+    lastAnimations = {}
+    if writefile then
+        pcall(function() 
+            writefile(ANIMATION_SAVE_FILE, HttpService:JSONEncode({})) 
+        end)
+    end
+    
+    -- Terapkan kembali animasi asli
+    local function applyOriginal(animType, animIds)
+        if not animIds then return end
+        if animType == "Idle" then
+            if animIds[1] then setAnimation("Idle", animIds) end
+        else
+            if animIds then setAnimation(animType, animIds) end
+        end
+    end
+
+    applyOriginal("Idle", originalGameAnimations.Idle)
+    applyOriginal("Walk", originalGameAnimations.Walk)
+    applyOriginal("Run", originalGameAnimations.Run)
+    applyOriginal("Jump", originalGameAnimations.Jump)
+    applyOriginal("Fall", originalGameAnimations.Fall)
+    applyOriginal("Swim", originalGameAnimations.Swim)
+    applyOriginal("SwimIdle", originalGameAnimations.SwimIdle)
+    applyOriginal("Climb", originalGameAnimations.Climb)
+    
+    showNotification("Animasi telah dikembalikan ke bawaan game.", Color3.fromRGB(50, 150, 255))
+    
+    -- Perbarui UI untuk menghapus highlight hijau
+    if AnimationScreenGui then
+        initializeAnimationGUI()
+    end
+end
+
+-- [[ BARU: Fungsi untuk mengunci animasi ]]
+local function startAnimationLock()
+    if animationLockConnection then
+        animationLockConnection:Disconnect()
+    end
+    
+    isAnimationLockEnabled = true
+    showNotification("Kunci Animasi Diaktifkan!", Color3.fromRGB(50, 200, 50))
+
+    animationLockConnection = RunService.Heartbeat:Connect(function()
+        if not isAnimationLockEnabled then
+            if animationLockConnection then
+                animationLockConnection:Disconnect()
+                animationLockConnection = nil
+            end
+            return
+        end
+        
+        local char = LocalPlayer.Character
+        if char and next(lastAnimations) then
+            applyAllAnimations(char)
+        end
+    end)
+end
+
+local function stopAnimationLock()
+    if animationLockConnection then
+        animationLockConnection:Disconnect()
+        animationLockConnection = nil
+    end
+    isAnimationLockEnabled = false
+    showNotification("Kunci Animasi Dinonaktifkan.", Color3.fromRGB(200, 150, 50))
+end
+-- [[ AKHIR FUNGSI KUNCI ANIMASI ]]
 
     local function speedLock_applyDisabledState()
         local h = speedLock_humanoid
@@ -5177,6 +5273,16 @@ task.spawn(function()
             if isAnimationEnabled and applyAnimationTransparency then applyAnimationTransparency(v) end
             saveFeatureStates()
         end).LayoutOrder = 4
+
+        -- [[ BARU: Tombol untuk kunci animasi ]]
+        createToggle(VipTabContent, "Kunci Animasi", isAnimationLockEnabled, function(v)
+            if v then
+                startAnimationLock()
+            else
+                stopAnimationLock()
+            end
+            saveFeatureStates()
+        end).LayoutOrder = 5
     end
 
     setupSettingsTab = function()
@@ -6179,13 +6285,6 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
                         playbackMovers.alignPos = alignPos
                         playbackMovers.alignOrient = alignOrient
                     end)
-                    -- [[ PERBAIKAN BUG STUCK ANIMASI ]]
-                    -- Paksa Animate script untuk re-evaluasi state setelah jeda
-                    pcall(function()
-                        humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
-                        task.wait()
-                        humanoid:ChangeState(Enum.HumanoidStateType.Running)
-                    end)
                 end
         
                 local elapsedTime = tick() - loopStartTime
@@ -6253,7 +6352,9 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
                     for _, animData in ipairs(currentFrame.anims) do
                         requiredAnims[animData.id] = animData.time
                         if not animationCache[animData.id] then
-                            local anim = Instance.new("Animation"); anim.AnimationId = animData.id
+                            local anim = Instance.new("Animation")
+                            anim.Name = "ArexansPlaybackTrack"
+                            anim.AnimationId = animData.id
                             animationCache[animData.id] = humanoid:LoadAnimation(anim)
                         end
                         local track = animationCache[animData.id]
@@ -6388,6 +6489,20 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
                         -- Ini memerlukan sedikit trik karena elapsedTime bersifat lokal untuk koneksi
                         -- Kita akan menyimpannya di variabel upvalue saat jeda
                     end
+                    
+                    pcall(function()
+                        local char = LocalPlayer.Character
+                        if not char then return end
+                        local humanoid = char:FindFirstChildOfClass("Humanoid")
+                        if not humanoid then return end
+
+                        for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
+                            if track.Animation.Name == "ArexansPlaybackTrack" then
+                                track:Stop(0.1)
+                            end
+                        end
+                    end)
+
                     cleanupSinglePlayback(true) -- Gunakan 'true' untuk menandakan ini bagian dari sekuens
                     playButton.Text = "▶️"
                     playButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
@@ -6594,7 +6709,10 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
         if not character then return end
     
         -- Tunggu sebentar agar karakter sepenuhnya dimuat
-        task.wait(0.2) 
+        task.wait(0.2)
+
+        -- Simpan animasi asli game sebelum ditimpa
+        storeOriginalAnimations(character)
     
         -- Terapkan kembali status untuk setiap fitur
         -- Ini akan menangani status 'on' dan 'off'
@@ -6634,6 +6752,10 @@ local RECORDING_EXPORT_FILE = RECORDING_FOLDER .. "/" .. exportName .. ".json"
                 StartFly()
             end
         end
+
+    if isAnimationLockEnabled then
+        startAnimationLock()
+    end
 
         -- [BARU] Deteksi animasi bawaan game (HANYA UNTUK R6)
         isGameAnimationOverrideActive = false -- Reset status saat respawn
