@@ -4,12 +4,17 @@
     UI Theme terinspirasi dari Arexanstools.lua
     Aimbot & FOV logic oleh r5nd0m_us3r0 dan goofyahh_aleksandr
     
-    PERUBAHAN:
-    - Memperbaiki pemain lain yang 'freeze' saat head size besar dengan mengatur Massless & CanTouch.
-    - Memperbaiki fungsi MakeDraggable agar jendela bisa digeser melalui title bar.
-    - (User Req) Memperkecil UI, merapikan judul ke kiri, dan mengubah teks judul.
-    - (User Req) Diperkecil lagi menjadi "Super Mini" (180x220), font & label diringkas.
-    - (User Req) PERBAIKAN HITBOX: Mengembalikan CanCollide & CanTouch ke aslinya, namun tetap Massless = true.
+    PERUBAHAN (Oleh AI):
+    - ... (Perubahan sebelumnya)
+    - PERUBAHAN (v10): Mengatur 'Active = false' pada titleLabel dan triangleIcon di header ESP
+      agar tidak memblokir input klik dari tombol 'collapseButton' di belakangnya.
+    - PERUBAHAN (v11): [PERBAIKAN] Menghapus '.Visible = isMasterEspEnabled' dari
+      toggle ESP individual (Nama, Health, Tubuh, Garis) agar mereka
+      muncul/hilang dengan benar saat kontainer induknya di-toggle.
+    - PERUBAHAN (v12): [PERBAIKAN] Menambahkan 'MainResizeHandle.Visible = not isMinimized'
+      di dalam fungsi 'MinimizeButton.MouseButton1Click' untuk menyembunyikan
+      pegangan pengubah ukuran saat jendela diminimalkan, sehingga tidak
+      tumpang tindih dengan tombol 'CloseButton'.
 ]]
 
 -- Services
@@ -18,10 +23,20 @@ local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService") -- [DITAMBAHKAN v9] Diperlukan untuk menyimpan GUI
 local Camera = workspace.CurrentCamera
 
 -- Local Player
 local LocalPlayer = Players.LocalPlayer
+
+-- [BARU v9] Variabel path file untuk menyimpan posisi GUI
+local SAVE_FOLDER = "GamePerang"
+if isfolder and not isfolder(SAVE_FOLDER) then
+    pcall(makefolder, SAVE_FOLDER)
+end
+local GUI_POSITIONS_SAVE_FILE = SAVE_FOLDER .. "/GuiPositions.json"
+local loadedGuiPositions = nil -- Cache untuk posisi yang dimuat
+local MainFrame -- Deklarasi awal untuk MainFrame agar bisa diakses oleh loadGuiPositions
 
 --====================================================================--
 --                           PENGATURAN FITUR                         --
@@ -34,16 +49,23 @@ local currentTarget = "All"
 local currentSize = 3
 local headSizeLoopConnection = nil
 
--- Pengaturan ESP (dari aimlock.lua)
+-- Pengaturan ESP (DIIMPOR DARI esp.lua)
 local IsEspNameEnabled = false
 local IsEspBodyEnabled = false
+local IsEspLineEnabled = false
+local IsEspHealthBarEnabled = false -- TOGGLE BARU UNTUK HEALTH BAR
+local isMasterEspEnabled = false -- <<<< [BARU] TOGGLE MASTER UNTUK SEMUA ESP
 local EspRenderConnection = nil
-local espCache = {} -- Cache for ESP GUI elements
+local espCache = {} -- Cache untuk elemen GUI ESP
+-- [BARU v8] Variabel warna yang dapat disesuaikan
+local teamColor = Color3.fromRGB(0, 150, 255) -- BIRU (Kawan)
+local enemyColor = Color3.fromRGB(255, 100, 100) -- MERAH (Musuh)
+
 
 -- Pengaturan Aimbot (dari cit.lua)
 local AimbotEnabled = false
 local WallCheck = true
-local TeamCheck = false
+-- local TeamCheck = false -- <<< DIHAPUS (Sekarang otomatis)
 local ShowFOV = true
 local AimPart = "Head"
 local FOV = 150
@@ -65,7 +87,7 @@ if Drawing then -- Memeriksa apakah pustaka 'Drawing' ada
     FOVCircle.Visible = ShowFOV
     FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
 else
-    print("Peringatan: Pustaka 'Drawing' tidak ditemukan. Lingkaran FOV akan dinonaktifkan.")
+    print("Peringatan: Pustaka 'Drawing' tidak ditemukan. Lingkaran FOV akan dinaktifkan.")
     ShowFOV = false -- Paksa nonaktifkan jika tidak ada library
 end
 
@@ -83,7 +105,10 @@ local function GetClosestPlayer()
             local part = player.Character[AimPart]
             local humanoid = player.Character:FindFirstChild("Humanoid")
             if humanoid and humanoid.Health > 0 then
-                if not TeamCheck or player.Team ~= LocalPlayer.Team then
+                
+                -- [PERUBAHAN v3] Logika TeamCheck otomatis diaktifkan. Hanya target musuh.
+                -- Aimbot tetap menggunakan 'Player.Team' karena lebih aman untuk tidak mengunci tim
+                if player.Team ~= LocalPlayer.Team then 
                     local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
                     if onScreen then
                         local dist = (Vector2.new(screenPos.X, screenPos.Y) - Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)).Magnitude
@@ -113,7 +138,60 @@ end
 --                           FUNGSI HELPER (aimlock.lua)              --
 --====================================================================--
 
+-- [BARU v9] Fungsi untuk menyimpan/memuat posisi/ukuran GUI
+-- Diletakkan di sini agar bisa diakses oleh MakeDraggable
+local function saveGuiPositions()
+    if not writefile or not MainFrame or not MainFrame.Parent then
+        return
+    end
+
+    local guiDataToSave = {
+        MainFrame = {
+            XScale = MainFrame.Position.X.Scale,
+            XOffset = MainFrame.Position.X.Offset,
+            YScale = MainFrame.Position.Y.Scale,
+            YOffset = MainFrame.Position.Y.Offset,
+            SizeX = MainFrame.Size.X.Offset,
+            SizeY = MainFrame.Size.Y.Offset
+        }
+    }
+
+    pcall(function()
+        local jsonData = HttpService:JSONEncode(guiDataToSave)
+        writefile(GUI_POSITIONS_SAVE_FILE, jsonData)
+    end)
+end
+
+local function loadGuiPositions()
+    if not readfile or not isfile or not isfile(GUI_POSITIONS_SAVE_FILE) then
+        return
+    end
+
+    local success, result = pcall(function()
+        local fileContent = readfile(GUI_POSITIONS_SAVE_FILE)
+        loadedGuiPositions = HttpService:JSONDecode(fileContent)
+
+        -- Terapkan data yang dimuat ke MainFrame
+        if MainFrame and MainFrame.Parent and loadedGuiPositions and loadedGuiPositions.MainFrame then
+            local data = loadedGuiPositions.MainFrame
+            MainFrame.Position = UDim2.new(data.XScale, data.XOffset, data.YScale, data.YOffset)
+            -- Terapkan ukuran HANYA jika disimpan (tambahkan min size clamp)
+            if data.SizeX and data.SizeY then
+                MainFrame.Size = UDim2.new(0, math.max(180, data.SizeX), 0, math.max(220, data.SizeY))
+            end
+        end
+    end)
+    
+    if not success then
+        warn("Gagal memuat posisi GUI:", result)
+        loadedGuiPositions = nil
+    end
+end
+
+
 -- Fungsi untuk mendapatkan pemain berdasarkan input
+-- [PERUBAHAN v7] Fungsi ini tidak lagi digunakan oleh loop Heartbeat,
+-- namun tetap dipertahankan jika 'applyHeadSize' dipanggil dari tempat lain (mis. UI)
 local function getPlayer(targetName)
     local foundPlayers = {}
     if not targetName or targetName == "" then return {} end -- Handle empty input
@@ -180,6 +258,8 @@ local function MakeDraggable(guiObject, dragHandle)
                     dragging = false
                     guiObject.ZIndex = 10 -- Kembalikan ZIndex normal
                     
+                    saveGuiPositions() -- [BARU v9] Simpan posisi setelah di-drag
+
                     -- Putuskan koneksi
                     if moveConnection then moveConnection:Disconnect(); moveConnection = nil end
                     if releaseConnection then releaseConnection:Disconnect(); releaseConnection = nil end
@@ -271,14 +351,283 @@ local function createToggleSwitch(parent, labelText, initialState, callback)
     end
 end
 
+-- [BARU v8] Helper functions untuk Color Picker (diambil dari jsos-ksosis9eosjsos!1ks.lua)
+local function createHueSlider(parent, label, initialVal, callback)
+    local sliderHeight = 16
+    local thumbSize = 16
+    local minVal, maxVal = 0, 1
+    local frame = Instance.new("Frame", parent)
+    frame.Size = UDim2.new(1, -10, 0, 30)
+    frame.Position = UDim2.new(0, 5, 0, 0)
+    frame.BackgroundTransparency = 1
+    local textLabel = Instance.new("TextLabel", frame)
+    textLabel.Size = UDim2.new(0, 20, 1, 0)
+    textLabel.Position = UDim2.new(0, 0, 0, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Text = label
+    textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    textLabel.TextSize = 12
+    textLabel.Font = Enum.Font.SourceSans
+    textLabel.TextXAlignment = Enum.TextXAlignment.Left
+    local valueLabel = Instance.new("TextLabel", frame)
+    valueLabel.Size = UDim2.new(0, 35, 1, 0)
+    valueLabel.Position = UDim2.new(1, -35, 0, 0)
+    valueLabel.BackgroundTransparency = 1
+    valueLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+    valueLabel.TextSize = 12
+    valueLabel.Font = Enum.Font.SourceSans
+    valueLabel.TextXAlignment = Enum.TextXAlignment.Right
+    local track = Instance.new("TextButton", frame)
+    track.Name = "Track"
+    track.Size = UDim2.new(1, -65, 0, sliderHeight / 2)
+    track.Position = UDim2.new(0, 25, 0.5, -(sliderHeight/4))
+    track.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    track.BorderSizePixel = 0
+    track.Text = ""
+    track.AutoButtonColor = false
+    local trackCorner = Instance.new("UICorner", track)
+    trackCorner.CornerRadius = UDim.new(1, 0)
+    local gradient = Instance.new("UIGradient", track)
+    gradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
+        ColorSequenceKeypoint.new(0.166, Color3.fromRGB(255, 255, 0)),
+        ColorSequenceKeypoint.new(0.333, Color3.fromRGB(0, 255, 0)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 255, 255)),
+        ColorSequenceKeypoint.new(0.666, Color3.fromRGB(0, 0, 255)),
+        ColorSequenceKeypoint.new(0.833, Color3.fromRGB(255, 0, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0))
+    })
+    local thumb = Instance.new("Frame", track)
+    thumb.Name = "Thumb"
+    thumb.Size = UDim2.new(0, thumbSize, 0, thumbSize)
+    thumb.BackgroundColor3 = Color3.fromRGB(220, 220, 220)
+    thumb.BorderSizePixel = 0
+    local thumbCorner = Instance.new("UICorner", thumb)
+    thumbCorner.CornerRadius = UDim.new(1, 0)
+    local currentValue = initialVal
+    local function setValue(newValue, fireCallback)
+        currentValue = math.clamp(newValue, minVal, maxVal)
+        local percentage = (currentValue - minVal) / (maxVal - minVal)
+        local trackWidth = track.AbsoluteSize.X
+        local thumbWidth = thumb.AbsoluteSize.X
+        if trackWidth == 0 then trackWidth = 100 end -- Fallback jika belum digambar
+        local newThumbX = (trackWidth - thumbWidth) * percentage
+        thumb.Position = UDim2.new(0, newThumbX, 0.5, -thumbSize/2)
+        valueLabel.Text = tostring(math.floor(currentValue * 360))
+        if fireCallback and callback then
+            callback(currentValue)
+        end
+    end
+    local function updateFromInput(input)
+        local trackWidth = track.AbsoluteSize.X
+        local thumbWidth = thumb.AbsoluteSize.X
+        if trackWidth <= thumbWidth then return end
+        local relativeX = input.Position.X - track.AbsolutePosition.X - (thumbWidth / 2)
+        local percentage = math.clamp(relativeX / (trackWidth - thumbWidth), 0, 1)
+        local newValue = minVal + (maxVal - minVal) * percentage
+        setValue(newValue, true)
+    end
+    local isDragging = false
+    track.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then isDragging = true; updateFromInput(input) end end)
+    UserInputService.InputChanged:Connect(function(input) if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then updateFromInput(input) end end)
+    UserInputService.InputEnded:Connect(function(input) if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then isDragging = false end end)
+    frame.AncestryChanged:Connect(function(_, parent) if parent then RunService.Heartbeat:Wait(); setValue(currentValue, false) end end)
+    if frame:IsDescendantOf(game) then RunService.Heartbeat:Wait(); setValue(currentValue, false) end
+    return frame, setValue
+end
+
+local function createDynamicSlider(parent, label, initialVal, callback)
+    local sliderHeight = 16
+    local thumbSize = 16
+    local minVal, maxVal = 0, 1
+    local frame = Instance.new("Frame", parent)
+    frame.Size = UDim2.new(1, -10, 0, 30)
+    frame.Position = UDim2.new(0, 5, 0, 0)
+    frame.BackgroundTransparency = 1
+    local textLabel = Instance.new("TextLabel", frame)
+    textLabel.Size = UDim2.new(0, 20, 1, 0)
+    textLabel.Position = UDim2.new(0, 0, 0, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Text = label
+    textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    textLabel.TextSize = 12
+    textLabel.Font = Enum.Font.SourceSans
+    textLabel.TextXAlignment = Enum.TextXAlignment.Left
+    local valueLabel = Instance.new("TextLabel", frame)
+    valueLabel.Size = UDim2.new(0, 35, 1, 0)
+    valueLabel.Position = UDim2.new(1, -35, 0, 0)
+    valueLabel.BackgroundTransparency = 1
+    valueLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+    valueLabel.TextSize = 12
+    valueLabel.Font = Enum.Font.SourceSans
+    valueLabel.TextXAlignment = Enum.TextXAlignment.Right
+    local track = Instance.new("TextButton", frame)
+    track.Name = "Track"
+    track.Size = UDim2.new(1, -65, 0, sliderHeight / 2)
+    track.Position = UDim2.new(0, 25, 0.5, -(sliderHeight/4))
+    track.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    track.BorderSizePixel = 0
+    track.Text = ""
+    track.AutoButtonColor = false
+    local trackCorner = Instance.new("UICorner", track)
+    trackCorner.CornerRadius = UDim.new(1, 0)
+    local gradient = Instance.new("UIGradient", track)
+    gradient.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
+    local thumb = Instance.new("Frame", track)
+    thumb.Name = "Thumb"
+    thumb.Size = UDim2.new(0, thumbSize, 0, thumbSize)
+    thumb.BackgroundColor3 = Color3.fromRGB(220, 220, 220)
+    thumb.BorderSizePixel = 0
+    local thumbCorner = Instance.new("UICorner", thumb)
+    thumbCorner.CornerRadius = UDim.new(1, 0)
+    local currentValue = initialVal
+    local function setValue(newValue, fireCallback)
+        currentValue = math.clamp(newValue, minVal, maxVal)
+        local percentage = (currentValue - minVal) / (maxVal - minVal)
+        local trackWidth = track.AbsoluteSize.X
+        local thumbWidth = thumb.AbsoluteSize.X
+        if trackWidth == 0 then trackWidth = 100 end -- Fallback jika belum digambar
+        local newThumbX = (trackWidth - thumbWidth) * percentage
+        thumb.Position = UDim2.new(0, newThumbX, 0.5, -thumbSize/2)
+        valueLabel.Text = tostring(math.floor(currentValue * 100))
+        if fireCallback and callback then
+            callback(currentValue)
+        end
+    end
+    local function updateFromInput(input)
+        local trackWidth = track.AbsoluteSize.X
+        local thumbWidth = thumb.AbsoluteSize.X
+        if trackWidth <= thumbWidth then return end
+        local relativeX = input.Position.X - track.AbsolutePosition.X - (thumbWidth / 2)
+        local percentage = math.clamp(relativeX / (trackWidth - thumbWidth), 0, 1)
+        local newValue = minVal + (maxVal - minVal) * percentage
+        setValue(newValue, true)
+    end
+    local isDragging = false
+    track.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then isDragging = true; updateFromInput(input) end end)
+    UserInputService.InputChanged:Connect(function(input) if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then updateFromInput(input) end end)
+    UserInputService.InputEnded:Connect(function(input) if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then isDragging = false end end)
+    frame.AncestryChanged:Connect(function(_, parent) if parent then RunService.Heartbeat:Wait(); setValue(currentValue, false) end end)
+    if frame:IsDescendantOf(game) then RunService.Heartbeat:Wait(); setValue(currentValue, false) end
+    local function updateGradient(colorSeq)
+        gradient.Color = colorSeq
+    end
+    return frame, setValue, updateGradient
+end
+
+local function createHSVColorPickerGroup(parent, title, initialColor, colorChangedCallback)
+    local groupFrame = Instance.new("Frame", parent)
+    groupFrame.Size = UDim2.new(1, 0, 0, 120)
+    groupFrame.BackgroundTransparency = 1
+    local groupLayout = Instance.new("UIListLayout", groupFrame)
+    groupLayout.Padding = UDim.new(0, 0)
+    local titleFrame = Instance.new("Frame", groupFrame)
+    titleFrame.Size = UDim2.new(1, 0, 0, 30)
+    titleFrame.BackgroundTransparency = 1
+    local titleLabel = Instance.new("TextLabel", titleFrame)
+    titleLabel.Size = UDim2.new(0.7, -5, 1, 0)
+    titleLabel.Position = UDim2.new(0, 5, 0, 0)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Text = title
+    titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    titleLabel.TextSize = 14
+    titleLabel.Font = Enum.Font.SourceSansBold
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    local preview = Instance.new("Frame", titleFrame)
+    preview.Size = UDim2.new(0, 50, 0, 20)
+    preview.Position = UDim2.new(1, -55, 0.5, -10)
+    preview.BackgroundColor3 = initialColor
+    preview.BorderSizePixel = 1
+    preview.BorderColor3 = Color3.fromRGB(150, 150, 150)
+    local previewCorner = Instance.new("UICorner", preview)
+    previewCorner.CornerRadius = UDim.new(0, 4)
+    local initialH, initialS, initialV = initialColor:ToHSV()
+    local currentH, currentS, currentV = initialH, initialS, initialV
+    local setSGradient, setVGradient
+    local function updateColor()
+        local newColor = Color3.fromHSV(currentH, currentS, currentV)
+        preview.BackgroundColor3 = newColor
+        if colorChangedCallback then
+            colorChangedCallback(newColor)
+        end
+    end
+    local function updateSaturationGradient()
+        if setSGradient then
+            local startColor = Color3.fromHSV(currentH, 0, currentV)
+            local endColor = Color3.fromHSV(currentH, 1, currentV)
+            setSGradient(ColorSequence.new(startColor, endColor))
+        end
+    end
+    local function updateValueGradient()
+        if setVGradient then
+            local startColor = Color3.fromHSV(currentH, currentS, 0)
+            local endColor = Color3.fromHSV(currentH, currentS, 1)
+            setVGradient(ColorSequence.new(startColor, endColor))
+        end
+    end
+    createHueSlider(groupFrame, "H", currentH, function(h)
+        currentH = h
+        updateColor()
+        updateSaturationGradient()
+        updateValueGradient()
+    end)
+    local sFrame, sSetValue, sSetGradient = createDynamicSlider(groupFrame, "S", currentS, function(s)
+        currentS = s
+        updateColor()
+        updateValueGradient()
+    end)
+    setSGradient = sSetGradient
+    local vFrame, vSetValue, vSetGradient = createDynamicSlider(groupFrame, "V", currentV, function(v)
+        currentV = v
+        updateColor()
+        updateSaturationGradient()
+    end)
+    setVGradient = vSetGradient
+    updateSaturationGradient()
+    updateValueGradient()
+    return groupFrame
+end
+-- [AKHIR v8] Akhir dari helper functions
+
+
 --====================================================================--
 --                        LOGIKA HEAD SIZE (aimlock.lua)              --
 --====================================================================--
+
+-- [PERUBAHAN v7] Fungsi baru untuk mengembalikan headsize 1 pemain
+local function revertHeadSizeForPlayer(player)
+    local originalProps = originalHeadSizes[player]
+    if not originalProps then return end -- Tidak ada yang perlu dikembalikan
+
+    local character = player.Character
+    local head = character and character:FindFirstChild("Head")
+    
+    if head and head:IsA("BasePart") then
+        -- Hanya kembalikan jika properti asli tersimpan sebagai tabel
+        if type(originalProps) == "table" then
+            head.Size = originalProps.Size
+            head.CanCollide = originalProps.CanCollide
+            head.Massless = originalProps.Massless
+            head.CanTouch = originalProps.CanTouch
+        end
+    end
+    
+    -- Hapus dari pelacakan
+    originalHeadSizes[player] = nil
+end
+
 
 -- Fungsi utama untuk mengubah ukuran kepala
 local function applyHeadSizeToPlayer(targetPlayer, size)
     -- *** Exclude LocalPlayer ***
     if targetPlayer == LocalPlayer then return false end
+
+    -- [PERUBAHAN v4] Jika target adalah "all" or "others", jangan terapkan ke rekan satu tim.
+    -- Loop utama di v7 sudah menangani ini, tapi ini adalah pengaman kedua.
+    if (currentTarget:lower() == "all" or currentTarget:lower() == "others") and targetPlayer.Team == LocalPlayer.Team then
+        revertHeadSizeForPlayer(targetPlayer) -- Pastikan dikembalikan jika terlanjur diubah
+        return false -- Jangan terapkan ke rekan satu tim
+    end
 
     local character = targetPlayer.Character
     local head = character and character:FindFirstChild("Head")
@@ -296,19 +645,30 @@ local function applyHeadSizeToPlayer(targetPlayer, size)
 
         -- Apply new size
         local newSizeVector = Vector3.new(size, size, size)
-        head.Size = newSizeVector
-        head.Massless = true  -- <<< PERBAIKAN: Buat tidak bermassa agar tidak 'freeze'
+        
+        -- [PERUBAHAN v7] Hanya terapkan jika BERBEDA untuk efisiensi
+        if head.Size ~= newSizeVector then
+            head.Size = newSizeVector
+        end
+        if head.Massless ~= true then
+            head.Massless = true  -- <<< PERBAIKAN: Buat tidak bermassa agar tidak 'freeze'
+        end
         
         -- <<< PERBAIKAN HITBOX: Kembalikan properti asli agar bisa di-raycast (ditembak)
-        head.CanCollide = originalHeadSizes[targetPlayer].CanCollide
-        head.CanTouch = originalHeadSizes[targetPlayer].CanTouch
+        local originalProps = originalHeadSizes[targetPlayer]
+        if head.CanCollide ~= originalProps.CanCollide then
+            head.CanCollide = originalProps.CanCollide
+        end
+        if head.CanTouch ~= originalProps.CanTouch then
+            head.CanTouch = originalProps.CanTouch
+        end
         
         return true -- Applied successfully
     end
     return false -- Failed to apply
 end
 
--- Fungsi loop untuk memastikan ukuran kepala tetap
+-- [PERUBAHAN v7] Loop Heartbeat yang dirombak total
 local function startHeadSizeLoop()
     if headSizeLoopConnection then
         headSizeLoopConnection:Disconnect()
@@ -318,41 +678,53 @@ local function startHeadSizeLoop()
     headSizeLoopConnection = RunService.Heartbeat:Connect(function()
         if not isHeadSizeActive then return end -- Stop if feature is off
 
-        local playersToModify = getPlayer(currentTarget)
-        for _, targetPlayer in ipairs(playersToModify) do
-             -- *** Exclude LocalPlayer in loop too ***
-             if targetPlayer == LocalPlayer then continue end
+        local targetNameLower = currentTarget:lower()
+        local localPlayerTeam = LocalPlayer.Team -- Ambil sekali per frame
 
-            local character = targetPlayer.Character
-            local head = character and character:FindFirstChild("Head")
-            if head and head:IsA("BasePart") and originalHeadSizes[targetPlayer] then -- Pastikan props asli ada
-                local expectedSize = Vector3.new(currentSize, currentSize, currentSize)
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player == LocalPlayer then continue end
+
+            -- 1. Tentukan apakah pemain ini adalah target
+            local isTarget = false
+            if targetNameLower == "all" or targetNameLower == "others" then
+                isTarget = true
+            elseif targetNameLower == "me" then
+                -- Sudah dilewati oleh 'player == LocalPlayer'
+                isTarget = false
+            else
+                -- Cek nama spesifik
+                if player.Name:lower():find(targetNameLower, 1, true) or player.DisplayName:lower():find(targetNameLower, 1, true) then
+                    isTarget = true
+                end
+            end
+
+            -- 2. Cek status pemain (hidup/mati)
+            local character = player.Character
+            local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+            local isAlive = humanoid and humanoid.Health > 0
+
+            -- 3. Terapkan atau Kembalikan berdasarkan logika
+            if isTarget and isAlive then
+                -- Pemain adalah target dan hidup
+                local isTeam = (player.Team == localPlayerTeam)
                 
-                -- Terapkan properti hanya jika berbeda untuk menghindari pembaruan yang tidak perlu
-                if head.Size ~= expectedSize then
-                    head.Size = expectedSize
+                if (targetNameLower == "all" or targetNameLower == "others") and isTeam then
+                    -- Target adalah "all" tapi pemain ini kawan. Kembalikan!
+                    revertHeadSizeForPlayer(player)
+                else
+                    -- Target adalah musuh di mode "all" ATAU target nama spesifik. Terapkan!
+                    applyHeadSizeToPlayer(player, currentSize)
                 end
-                
-                -- <<< PERBAIKAN: Pertahankan Massless = true (anti-freeze)
-                if head.Massless ~= true then
-                    head.Massless = true
-                end
-                
-                -- <<< PERBAIKAN HITBOX: Pertahankan CanCollide & CanTouch asli (agar bisa ditembak)
-                local originalProps = originalHeadSizes[targetPlayer]
-                if head.CanCollide ~= originalProps.CanCollide then
-                    head.CanCollide = originalProps.CanCollide
-                end
-                if head.CanTouch ~= originalProps.CanTouch then
-                    head.CanTouch = originalProps.CanTouch
-                end
+            else
+                -- Pemain BUKAN target, ATAU pemain mati/tidak valid. Kembalikan!
+                revertHeadSizeForPlayer(player)
             end
         end
     end)
 end
 
 
--- Fungsi untuk mengembalikan ukuran kepala ke semula
+-- Fungsi untuk mengembalikan ukuran kepala ke semula (saat toggle dimatikan)
 local function revertHeadSize()
     if headSizeLoopConnection then -- Stop the loop first
         headSizeLoopConnection:Disconnect()
@@ -362,33 +734,19 @@ local function revertHeadSize()
     local revertedCount = 0
     local playersToClear = {} -- Kumpulkan pemain untuk dihapus dari originalHeadSizes setelah iterasi
 
-    for player, originalProps in pairs(originalHeadSizes) do
-        if player ~= LocalPlayer then
-             local character = player.Character
-             local head = character and character:FindFirstChild("Head")
-             if head and head:IsA("BasePart") then
-                 -- Hanya kembalikan jika properti asli tersimpan sebagai tabel
-                 if type(originalProps) == "table" then
-                     head.Size = originalProps.Size
-                     head.CanCollide = originalProps.CanCollide
-                     head.Massless = originalProps.Massless
-                     head.CanTouch = originalProps.CanTouch
-                     revertedCount = revertedCount + 1
-                 end
-                 table.insert(playersToClear, player) -- Tandai untuk dihapus dari pelacakan
-             else
-                -- Pemain tidak memiliki kepala atau karakter, tandai untuk dihapus
-                table.insert(playersToClear, player)
-             end
-        else
-            -- Pemain lokal entah bagaimana masuk ke daftar, tandai untuk dihapus
-             table.insert(playersToClear, player)
-        end
+    -- [PERUBAHAN v7] Disederhanakan untuk menggunakan revertHeadSizeForPlayer
+    for player, _ in pairs(originalHeadSizes) do
+        table.insert(playersToClear, player)
     end
-
-    -- Hapus pemain yang dilacak
+    
     for _, player in ipairs(playersToClear) do
-        originalHeadSizes[player] = nil
+        if player and player.Parent then -- Pastikan pemain masih ada
+            revertHeadSizeForPlayer(player)
+            revertedCount = revertedCount + 1
+        else
+            -- Pemain sudah keluar, hapus saja dari cache
+            originalHeadSizes[player] = nil
+        end
     end
 
     if revertedCount > 0 then
@@ -401,201 +759,322 @@ end
 local function toggleHeadSizeFeature(activate)
     isHeadSizeActive = activate
     if isHeadSizeActive then
-        -- Apply initial size immediately
-        local playersToModify = getPlayer(currentTarget)
-        local appliedCount = 0
-        for _, player in ipairs(playersToModify) do
-             if player ~= LocalPlayer then
-                 if applyHeadSizeToPlayer(player, currentSize) then
-                     appliedCount = appliedCount + 1
-                 end
-             end
-        end
-        print("Head size applied initially to " .. appliedCount .. " players.")
-        startHeadSizeLoop() -- Start the loop to maintain the size
+        -- [PERUBAHAN v7] Cukup mulai loop. Loop akan menangani penerapan awal.
+        startHeadSizeLoop()
+        print("Head size loop started.")
     else
         revertHeadSize() -- Revert sizes and stops the loop
+        print("Head size loop stopped and reverted all.")
     end
 end
 
 
 --====================================================================--
---                             LOGIKA ESP (aimlock.lua)               --
+--                    LOGIKA ESP (DIIMPOR DARI esp.lua)               --
 --====================================================================--
+-- [INFO] Loop ESP sudah menggunakan RenderStepped, ini adalah yang tercepat
+-- untuk pembaruan visual. Tidak perlu diubah.
 
-local function UpdateESP()
-    -- Only run if either ESP is enabled
-    if not IsEspNameEnabled and not IsEspBodyEnabled then return end
-
-    local localPlayerTeam = LocalPlayer.Team
-
-    -- Create a set of players currently needing ESP update this frame
-    local playersToUpdate = {}
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then
-            playersToUpdate[player] = true -- Mark player for update
-        end
-    end
-
-    -- Update existing ESP elements or create new ones
-    for player, _ in pairs(playersToUpdate) do
-        local char = player.Character
-        local head = char and char:FindFirstChild("Head")
-
-        -- Check if player is valid and alive for ESP
-        if head and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
-            local espElements = espCache[player] -- Use player object as key
-            if not espElements then
-                espElements = {}
-                espCache[player] = espElements
-            end
-
-            -- === ESP Name Logic ===
-            if IsEspNameEnabled then
-                if not espElements.billboard or not espElements.billboard.Parent then
-                    -- Create Billboard GUI if it doesn't exist or was removed
-                    local billboardGui = Instance.new("BillboardGui")
-                    billboardGui.Name = "PlayerESP_Name_" .. player.UserId -- Unique name
-                    billboardGui.AlwaysOnTop = true
-                    billboardGui.Size = UDim2.new(0, 150, 0, 40)
-                    billboardGui.StudsOffset = Vector3.new(0, 2.5, 0) -- Offset above head
-                    billboardGui.Adornee = head
-                    billboardGui.Parent = CoreGui -- Parent directly to CoreGui
-
-                    local textLabel = Instance.new("TextLabel", billboardGui)
-                    textLabel.Name = "NameLabel"
-                    textLabel.Size = UDim2.new(1, 0, 0.5, 0)
-                    textLabel.BackgroundTransparency = 1
-                    textLabel.Font = Enum.Font.SourceSansBold
-                    textLabel.TextSize = 14
-                    textLabel.Text = player.DisplayName
-                    textLabel.TextStrokeTransparency = 0.5 -- Add slight stroke for visibility
-
-                    local distLabel = Instance.new("TextLabel", billboardGui)
-                    distLabel.Name = "DistanceLabel"
-                    distLabel.Size = UDim2.new(1, 0, 0.5, 0)
-                    distLabel.Position = UDim2.new(0, 0, 0.5, 0)
-                    distLabel.BackgroundTransparency = 1
-                    distLabel.Font = Enum.Font.SourceSans
-                    distLabel.TextSize = 12
-                    distLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
-                    distLabel.TextStrokeTransparency = 0.5
-
-                    espElements.billboard = billboardGui
-                end
-
-                -- Update existing Billboard GUI
-                local billboard = espElements.billboard
-                if billboard.Adornee ~= head then billboard.Adornee = head end -- Re-Adorn if needed
-
-                -- Update distance
-                local localRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                if localRoot then
-                    local distance = math.floor((localRoot.Position - head.Position).Magnitude)
-                    billboard.DistanceLabel.Text = "[" .. tostring(distance) .. "m]"
-                else
-                     billboard.DistanceLabel.Text = "[?m]"
-                end
-
-                -- Update color based on team
-                if player.Team == localPlayerTeam and localPlayerTeam ~= nil then
-                    billboard.NameLabel.TextColor3 = Color3.fromRGB(100, 255, 100) -- Green for team
-                else
-                    billboard.NameLabel.TextColor3 = Color3.fromRGB(255, 100, 100) -- Red for enemy/neutral (Changed from blue)
-                end
-            elseif espElements.billboard then
-                -- Destroy if ESP Name is disabled but element exists
-                espElements.billboard:Destroy()
-                espElements.billboard = nil
-            end
-
-            -- === ESP Body Logic (Highlight) ===
-            if IsEspBodyEnabled then
-                if not espElements.highlight or not espElements.highlight.Parent then
-                    -- Create Highlight if it doesn't exist or was removed
-                    local highlight = Instance.new("Highlight")
-                    highlight.Name = "ESPHighlight_" .. player.UserId -- Unique name
-                    highlight.FillTransparency = 0.7
-                    highlight.OutlineTransparency = 0.3 -- Make outline slightly more visible
-                    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop -- Ensure visibility through walls
-                    highlight.Parent = char -- Parent to character model
-                    espElements.highlight = highlight
-                end
-
-                -- Ensure Highlight is parented correctly (might reparent if character reloads)
-                if espElements.highlight.Parent ~= char then
-                    espElements.highlight.Parent = char
-                end
-
-                -- Update color based on team
-                if player.Team == localPlayerTeam and localPlayerTeam ~= nil then
-                    espElements.highlight.FillColor = Color3.fromRGB(0, 1, 0) -- Green
-                    espElements.highlight.OutlineColor = Color3.fromRGB(0, 0.5, 0) -- Darker Green Outline
-                else
-                    espElements.highlight.FillColor = Color3.fromRGB(1, 0, 0) -- Red
-                    espElements.highlight.OutlineColor = Color3.fromRGB(0.5, 0, 0) -- Darker Red Outline
-                end
-            elseif espElements.highlight then
-                -- Destroy if ESP Body is disabled but element exists
-                espElements.highlight:Destroy()
-                espElements.highlight = nil
-            end
-
-        else
-            -- Player is invalid, dead, or has no head - Clean up their ESP elements
-            local espElements = espCache[player]
-            if espElements then
-                if espElements.billboard then espElements.billboard:Destroy() end
-                if espElements.highlight then espElements.highlight:Destroy() end
-                espCache[player] = nil -- Remove player from cache
-            end
-        end
-    end
-
-    -- Clean up cache entries for players who left or are no longer valid
-    for player, elements in pairs(espCache) do
-        if not playersToUpdate[player] then
-            if elements.billboard then elements.billboard:Destroy() end
-            if elements.highlight then elements.highlight:Destroy() end
-            espCache[player] = nil
-        end
+-- Fungsi BARU untuk membersihkan semua elemen ESP UNTUK SATU PEMAIN
+local function cleanupPlayerESP(userId)
+    local elements = espCache[userId]
+    if elements then
+        -- Hancurkan semua elemen Billboard (yang berisi nama dan health bar)
+        if elements.billboard then pcall(function() elements.billboard:Destroy() end) end
+        if elements.highlight then pcall(function() elements.highlight:Destroy() end) end
+        if elements.beam then pcall(function() elements.beam:Destroy() end) end
+        if elements.attachment0 then pcall(function() elements.attachment0:Destroy() end) end
+        if elements.attachment1 then pcall(function() elements.attachment1:Destroy() end) end
+        espCache[userId] = nil -- Hapus dari cache setelah dihancurkan
     end
 end
 
-
--- Function to manage the RunService connection for ESP
-local function manageEspConnection()
-    if (IsEspNameEnabled or IsEspBodyEnabled) and not EspRenderConnection then
-        -- Connect if either ESP is enabled and not already connected
-        EspRenderConnection = RunService.RenderStepped:Connect(UpdateESP)
-    elseif not IsEspNameEnabled and not IsEspBodyEnabled and EspRenderConnection then
-        -- Disconnect if both ESPs are disabled and connection exists
+-- Fungsi untuk membersihkan SEMUA elemen ESP
+local function cleanupAllESP()
+    if EspRenderConnection then
         EspRenderConnection:Disconnect()
         EspRenderConnection = nil
-        -- Clean up all existing ESP elements immediately
-        for player, elements in pairs(espCache) do
-            if elements.billboard then elements.billboard:Destroy() end
-            if elements.highlight then elements.highlight:Destroy() end
-        end
-        espCache = {} -- Clear the cache
+    end
+    
+    -- Gunakan fungsi cleanupPlayerESP untuk setiap entri di cache
+    for userId, _ in pairs(espCache) do
+        cleanupPlayerESP(userId)
     end
 end
 
--- Toggle functions for ESP Name and Body
+-- Fungsi utama yang di-loop untuk menggambar ESP (di RenderStepped)
+local function UpdateESP()
+    -- Cek apakah ada fitur ESP yang aktif
+    local isAnyEspActive = IsEspNameEnabled or IsEspBodyEnabled or IsEspLineEnabled or IsEspHealthBarEnabled
+    if not isAnyEspActive then return end
+    
+    -- [PERUBAHAN v6] Menggunakan TeamColor untuk perbandingan
+    local localPlayerTeamColor = LocalPlayer.TeamColor
+    
+    local localCharacter = LocalPlayer.Character
+    local localRoot = localCharacter and localCharacter:FindFirstChild("HumanoidRootPart")
+    local camera = workspace.CurrentCamera
+
+    -- Jika pemain lokal (kita) tidak memiliki root part (mati atau respawn), hentikan sementara.
+    if not localRoot or not camera then return end
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local char = player.Character
+            local head = char and char:FindFirstChild("Head")
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+
+            -- Cek: Apakah target player hidup (memiliki semua bagian penting dan Health > 0)?
+            if head and hrp and humanoid and humanoid.Health > 0 then
+                
+                local espElements = espCache[player.UserId]
+                if not espElements then
+                    espElements = {}
+                    espCache[player.UserId] = espElements
+                end
+
+                -- [PERUBAHAN v6] Logika TeamCheck otomatis diaktifkan menggunakan TeamColor
+                local isTeam = false -- Default ke musuh
+                
+                -- Cek jika kita punya TeamColor, warnanya BUKAN abu-abu (default), dan sama dgn pemain lain
+                if localPlayerTeamColor and localPlayerTeamColor.Name ~= "Medium stone grey" and player.TeamColor then
+                    isTeam = (player.TeamColor == localPlayerTeamColor)
+                end
+                
+                local espColor
+                if isTeam then
+                    espColor = teamColor -- [PERUBAHAN v8] Menggunakan variabel
+                else
+                    espColor = enemyColor -- [PERUBAHAN v8] Menggunakan variabel
+                end
+
+
+                local distance = (localRoot.Position - head.Position).Magnitude
+                
+                -- Cek apakah Billboard GUI (Nama, Jarak, Health Bar) diperlukan
+                local isBillboardNeeded = IsEspNameEnabled or IsEspHealthBarEnabled
+
+                if isBillboardNeeded then
+                    if not espElements.billboard then
+                        local billboardGui = Instance.new("BillboardGui")
+                        billboardGui.Name = "PlayerESP_Billboard"
+                        billboardGui.AlwaysOnTop = true
+                        billboardGui.Size = UDim2.new(0, 150, 0, 45) -- Ukuran tetap
+                        billboardGui.StudsOffset = Vector3.new(0, 2.5, 0)
+
+                        -- Name Label
+                        local nameLabel = Instance.new("TextLabel", billboardGui)
+                        nameLabel.Name = "NameLabel"
+                        nameLabel.Size = UDim2.new(1, 0, 0.4, 0)
+                        nameLabel.Position = UDim2.new(0, 0, 0, 0)
+                        nameLabel.BackgroundTransparency = 1
+                        nameLabel.Font = Enum.Font.SourceSansBold
+                        nameLabel.TextSize = 14
+                        nameLabel.Text = player.DisplayName
+                        nameLabel.TextXAlignment = Enum.TextXAlignment.Center
+
+                        -- Distance Label
+                        local distLabel = Instance.new("TextLabel", billboardGui)
+                        distLabel.Name = "DistanceLabel"
+                        distLabel.Size = UDim2.new(1, 0, 0.3, 0)
+                        distLabel.Position = UDim2.new(0, 0, 0.4, 0)
+                        distLabel.BackgroundTransparency = 1
+                        distLabel.Font = Enum.Font.SourceSans
+                        distLabel.TextSize = 12
+                        distLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+                        distLabel.TextXAlignment = Enum.TextXAlignment.Center
+                        
+                        -- HEALTH BAR CONTAINER
+                        local healthFrame = Instance.new("Frame", billboardGui)
+                        healthFrame.Name = "HealthBackground"
+                        healthFrame.Size = UDim2.new(1, -10, 0, 8) -- Ukuran awal
+                        healthFrame.Position = UDim2.new(0.5, -70, 0.7, 0)
+                        healthFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+                        healthFrame.BorderSizePixel = 1
+                        healthFrame.BorderColor3 = Color3.fromRGB(0, 0, 0)
+                        
+                        local healthFill = Instance.new("Frame", healthFrame)
+                        healthFill.Name = "HealthFill"
+                        healthFill.Size = UDim2.new(1, 0, 1, 0)
+                        healthFill.Position = UDim2.new(0, 0, 0, 0)
+                        healthFill.BackgroundColor3 = espColor 
+                        healthFill.BorderSizePixel = 0
+                        
+                        espElements.billboard = billboardGui
+                    end
+
+                    espElements.billboard.Adornee = head
+                    espElements.billboard.Parent = CoreGui
+                    
+                    -- A. Update Visibility Nama/Jarak (Tergantung Toggle)
+                    espElements.billboard.NameLabel.Visible = IsEspNameEnabled
+                    espElements.billboard.NameLabel.TextColor3 = espColor
+                    
+                    espElements.billboard.DistanceLabel.Visible = IsEspNameEnabled
+                    
+                    -- Update jarak dan teks
+                    local distanceText = "[" .. tostring(math.floor(distance)) .. "m]"
+                    espElements.billboard.DistanceLabel.Text = distanceText
+
+                    -- B. Update Health Bar
+                    local healthBackground = espElements.billboard:FindFirstChild("HealthBackground")
+                    
+                    if healthBackground then
+                        healthBackground.Visible = IsEspHealthBarEnabled -- Visibilitas berdasarkan toggle baru
+                        
+                        if IsEspHealthBarEnabled then
+                            -- === LOGIKA SCALING DINAMIS ===
+                            local MaxDistance = 150 -- Jarak maks untuk scaling (150 stud)
+                            local MinScaleFactor = 0.3 -- Skala minimum (30% dari ukuran penuh)
+                            local BaseBarWidth = 140 -- Lebar bar dasar (150 - 10)
+
+                            -- Hitung skala: 1.0 (dekat) hingga MinScaleFactor (jauh)
+                            local scaleFactor = math.max(MinScaleFactor, 1 - (distance / MaxDistance))
+
+                            local scaledWidth = BaseBarWidth * scaleFactor
+
+                            -- Terapkan ukuran dan posisi yang diskalakan
+                            healthBackground.Size = UDim2.new(0, scaledWidth, 0, 8)
+                            -- Penempatan di tengah (0.5 - (scaledWidth / 2) / 150)
+                            local centerOffset = (150 - scaledWidth) / 2
+                            healthBackground.Position = UDim2.new(0, centerOffset, 0.7, 0)
+                            
+                            -- Update fill bar
+                            local healthPercentage = humanoid.Health / humanoid.MaxHealth
+                            local healthFillFrame = healthBackground.HealthFill
+                            
+                            healthFillFrame.Size = UDim2.new(healthPercentage, 0, 1, 0)
+                            healthFillFrame.BackgroundColor3 = espColor -- Warna tim/musuh
+                        end
+                    end
+                
+                elseif espElements.billboard then
+                    -- Hancurkan Billboard jika tidak ada fitur yang memerlukannya
+                    espElements.billboard:Destroy()
+                    espElements.billboard = nil
+                end
+
+                -- 2. Logika ESP Tubuh (Highlight)
+                if IsEspBodyEnabled then
+                    if not espElements.highlight then
+                        local highlight = Instance.new("Highlight")
+                        highlight.Name = "ESPHighlight"
+                        highlight.FillTransparency = 0.7
+                        highlight.OutlineTransparency = 0.5
+                        highlight.Parent = char
+                        espElements.highlight = highlight
+                    end
+                    
+                    if espElements.highlight.Parent ~= char then
+                        espElements.highlight.Parent = char
+                    end
+
+                    espElements.highlight.FillColor = espColor 
+                    espElements.highlight.OutlineColor = espColor 
+
+                elseif espElements.highlight then
+                    espElements.highlight:Destroy()
+                    espElements.highlight = nil
+                end
+
+                -- 3. Logika ESP Garis (Line)
+                if IsEspLineEnabled then
+                    if not espElements.attachment0 then
+                        local att0 = Instance.new("Attachment")
+                        att0.Name = "ESPGarisAtt0_Origin"
+                        att0.Parent = camera 
+                        espElements.attachment0 = att0
+                    end
+                    
+                    if not espElements.attachment1 then
+                        local att1 = Instance.new("Attachment")
+                        att1.Name = "ESPGarisAtt1_Target"
+                        att1.Parent = hrp
+                        espElements.attachment1 = att1
+                    end
+
+                    if not espElements.beam then
+                        local beam = Instance.new("Beam")
+                        beam.Name = "ESPBeam"
+                        beam.Attachment0 = espElements.attachment0
+                        beam.Attachment1 = espElements.attachment1
+                        beam.Width0 = 0.01 
+                        beam.Width1 = 0.01
+                        beam.FaceCamera = true
+                        beam.Transparency = NumberSequence.new(0.5)
+                        beam.Parent = espElements.attachment0 
+                        espElements.beam = beam
+                    end
+
+                    local viewportSize = camera.ViewportSize
+                    local screenBottom = Vector2.new(viewportSize.X / 2, viewportSize.Y * 0.95) 
+                    
+                    local ray = camera:ViewportPointToRay(screenBottom.X, screenBottom.Y)
+                    espElements.attachment0.WorldPosition = ray.Origin + ray.Direction 
+
+                    if espElements.attachment1.Parent ~= hrp then
+                        espElements.attachment1.Parent = hrp
+                    end
+
+                    espElements.beam.Color = ColorSequence.new(espColor) 
+                    espElements.beam.Enabled = true
+
+                elseif espElements.beam then
+                    if espElements.beam then espElements.beam:Destroy(); espElements.beam = nil end
+                    if espElements.attachment0 then espElements.attachment0:Destroy(); espElements.attachment0 = nil end
+                    if espElements.attachment1 then espElements.attachment1:Destroy(); espElements.attachment1 = nil end
+                end
+
+            else
+                -- Pemain tidak punya karakter atau mati (Health <= 0), bersihkan ESP mereka.
+                -- Ini memastikan ESP hilang saat pemain target mati dan muncul kembali saat mereka respawn.
+                if espCache[player.UserId] then
+                    cleanupPlayerESP(player.UserId) -- Panggil fungsi bersih yang benar
+                end
+            end
+        end
+    end
+end
+
+-- Fungsi untuk mengelola koneksi loop ESP
+local function manageEspConnection()
+    local isAnyEspActive = IsEspNameEnabled or IsEspBodyEnabled or IsEspLineEnabled or IsEspHealthBarEnabled
+    if isAnyEspActive and not EspRenderConnection then
+        -- [INFO] Terhubung ke RenderStepped (Sangat Cepat)
+        EspRenderConnection = RunService.RenderStepped:Connect(UpdateESP)
+    elseif not isAnyEspActive and EspRenderConnection then
+        cleanupAllESP() -- Fungsi ini juga Disconnect
+    end
+end
+
+-- Fungsi Toggle untuk setiap fitur
 local function ToggleESPName(enabled)
     IsEspNameEnabled = enabled
-    manageEspConnection() -- Start or stop the RenderStepped connection
+    manageEspConnection()
 end
 
 local function ToggleESPBody(enabled)
     IsEspBodyEnabled = enabled
-    manageEspConnection() -- Start or stop the RenderStepped connection
+    manageEspConnection()
+end
+
+local function ToggleESPLine(enabled)
+    IsEspLineEnabled = enabled
+    manageEspConnection()
+end
+
+-- Fungsi Toggle Baru untuk Health Bar
+local function ToggleESPHealthBar(enabled)
+    IsEspHealthBarEnabled = enabled
+    manageEspConnection()
 end
 
 --====================================================================--
 --                          LOOP AIMBOT/FOV (cit.lua)                 --
 --====================================================================--
 
+-- [INFO] Loop Aimbot juga di RenderStepped (Sangat Cepat)
 AimbotRenderConnection = RunService.RenderStepped:Connect(function()
     if FOVCircle then -- Hanya update jika FOVCircle berhasil dibuat
         FOVCircle.Visible = ShowFOV
@@ -630,7 +1109,7 @@ ScreenGui.ResetOnSpawn = false
 ScreenGui.DisplayOrder = 11 -- Ensure it's above default UI
 
 -- Main Frame (Window)
-local MainFrame = Instance.new("Frame")
+MainFrame = Instance.new("Frame") -- [DIUBAH v9] Dihapus 'local' agar bisa diakses global
 MainFrame.Name = "MainFrame"
 MainFrame.Size = UDim2.new(0, 180, 0, 220) -- <<< (MINI) UKURAN DIPERKECIL
 MainFrame.Position = UDim2.new(0.5, -90, 0.5, -110) -- <<< (MINI) Posisi disesuaikan
@@ -652,6 +1131,53 @@ UIStroke.Color = Color3.fromRGB(0, 150, 255) -- Blue stroke
 UIStroke.Thickness = 1.5
 UIStroke.Transparency = 0.5
 UIStroke.Parent = MainFrame
+
+-- [BARU v9] Pegangan untuk mengubah ukuran jendela
+local MainResizeHandle = Instance.new("TextButton")
+MainResizeHandle.Name = "MainResizeHandle"
+MainResizeHandle.Text = "◢" -- Karakter opsional, bisa juga ""
+MainResizeHandle.Size = UDim2.new(0, 15, 0, 15)
+MainResizeHandle.Position = UDim2.new(1, -15, 1, -15)
+MainResizeHandle.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+MainResizeHandle.BackgroundTransparency = 0.5
+MainResizeHandle.BorderSizePixel = 0
+MainResizeHandle.TextColor3 = Color3.fromRGB(255, 255, 255)
+MainResizeHandle.TextSize = 12
+MainResizeHandle.TextXAlignment = Enum.TextXAlignment.Right
+MainResizeHandle.TextYAlignment = Enum.TextYAlignment.Bottom
+MainResizeHandle.ZIndex = 12 -- Pastikan di atas konten lain
+MainResizeHandle.Parent = MainFrame
+
+-- [BARU v9] Logika untuk mengubah ukuran
+MainResizeHandle.InputBegan:Connect(function(input)
+    if not (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then return end
+
+    local isResizing = true
+    local initialMousePosition = UserInputService:GetMouseLocation()
+    local initialFrameSize = MainFrame.AbsoluteSize
+
+    local inputChangedConnection
+    local inputEndedConnection
+
+    inputChangedConnection = UserInputService.InputChanged:Connect(function(changedInput)
+        if isResizing and (changedInput.UserInputType == Enum.UserInputType.MouseMovement or changedInput.UserInputType == Enum.UserInputType.Touch) then
+            local delta = UserInputService:GetMouseLocation() - initialMousePosition
+            local newSizeX = math.max(180, initialFrameSize.X + delta.X) -- Ukuran min
+            local newSizeY = math.max(220, initialFrameSize.Y + delta.Y) -- Ukuran min
+            MainFrame.Size = UDim2.new(0, newSizeX, 0, newSizeY)
+        end
+    end)
+
+    inputEndedConnection = UserInputService.InputEnded:Connect(function(endedInput)
+        if endedInput.UserInputType == input.UserInputType then
+            isResizing = false
+            if inputChangedConnection then inputChangedConnection:Disconnect() end
+            if inputEndedConnection then inputEndedConnection:Disconnect() end
+            saveGuiPositions() -- Simpan ukuran baru
+        end
+    end)
+end)
+
 
 -- Title Bar (Draggable Handle)
 local TitleBar = Instance.new("TextButton")
@@ -711,7 +1237,8 @@ ContentFrame.Position = UDim2.new(0, 5, 0, 25)
 ContentFrame.BackgroundTransparency = 1
 ContentFrame.Parent = MainFrame
 ContentFrame.ScrollingDirection = Enum.ScrollingDirection.Y -- <<< HANYA BISA SCROLL VERTIKAL
-ContentFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y -- <<< UKURAN CANVAS OTOMATIS
+-- ContentFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y -- <<< [DIHAPUS v9] Diganti dengan pembaruan manual
+ContentFrame.VerticalScrollBarInset = Enum.ScrollBarInset.Always -- [BARU v9] Mencegah scrollbar tumpang tindih
 ContentFrame.ScrollBarImageColor3 = Color3.fromRGB(0, 150, 255) -- <<< WARNA SCROLLBAR
 ContentFrame.ScrollBarThickness = 6 -- <<< KETEBALAN SCROLLBAR
 
@@ -720,6 +1247,73 @@ local ContentLayout = Instance.new("UIListLayout")
 ContentLayout.Padding = UDim.new(0, 3) -- <<< (MINI) Mengurangi padding
 ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
 ContentLayout.Parent = ContentFrame
+
+-- [BARU v9] Memperbarui CanvasSize secara manual untuk ScrollingFrame
+ContentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    ContentFrame.CanvasSize = UDim2.new(0, 0, 0, ContentLayout.AbsoluteContentSize.Y + 5)
+end)
+
+
+-- == [BARU v8] Frame untuk Pengaturan ESP ==
+local EspSettingsFrame = Instance.new("ScrollingFrame")
+EspSettingsFrame.Name = "EspSettingsFrame"
+EspSettingsFrame.Size = UDim2.new(1, -10, 1, -30) -- Ukuran sama dgn ContentFrame
+EspSettingsFrame.Position = UDim2.new(0, 5, 0, 25) -- Posisi sama dgn ContentFrame
+EspSettingsFrame.BackgroundTransparency = 1
+EspSettingsFrame.Parent = MainFrame
+EspSettingsFrame.Visible = false -- << Mulai tersembunyi
+EspSettingsFrame.ScrollingDirection = Enum.ScrollingDirection.Y
+-- EspSettingsFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y -- [DIHAPUS v9]
+EspSettingsFrame.VerticalScrollBarInset = Enum.ScrollBarInset.Always -- [BARU v9]
+EspSettingsFrame.ScrollBarImageColor3 = Color3.fromRGB(0, 150, 255)
+EspSettingsFrame.ScrollBarThickness = 6
+
+local SettingsLayout = Instance.new("UIListLayout")
+SettingsLayout.Padding = UDim.new(0, 3)
+SettingsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+SettingsLayout.Parent = EspSettingsFrame
+
+-- [BARU v9] Memperbarui CanvasSize secara manual untuk ScrollingFrame
+SettingsLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    EspSettingsFrame.CanvasSize = UDim2.new(0, 0, 0, SettingsLayout.AbsoluteContentSize.Y + 5)
+end)
+
+
+-- == [BARU v8] Tombol Kembali untuk Settings Frame ==
+local BackButtonFrame = Instance.new("Frame")
+BackButtonFrame.Name = "BackButtonFrame"
+BackButtonFrame.Size = UDim2.new(1, 0, 0, 25)
+BackButtonFrame.BackgroundTransparency = 1
+BackButtonFrame.LayoutOrder = 0 -- Paling atas
+BackButtonFrame.Parent = EspSettingsFrame
+
+local BackButton = Instance.new("TextButton")
+BackButton.Name = "BackButton"
+BackButton.Size = UDim2.new(1, 0, 1, 0)
+BackButton.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+BackButton.Font = Enum.Font.SourceSansBold
+BackButton.TextSize = 12
+BackButton.TextColor3 = Color3.new(1,1,1)
+BackButton.Text = "◀ Kembali"
+BackButton.Parent = BackButtonFrame
+local bbCorner = Instance.new("UICorner", BackButton); bbCorner.CornerRadius = UDim.new(0, 4)
+
+BackButton.MouseButton1Click:Connect(function()
+    EspSettingsFrame.Visible = false
+    ContentFrame.Visible = true
+end)
+
+-- == [BARU v8] Isi Frame Pengaturan ESP ==
+local teamColorGroup = createHSVColorPickerGroup(EspSettingsFrame, "Warna Tim", teamColor, function(newColor)
+    teamColor = newColor
+end)
+teamColorGroup.LayoutOrder = 1
+
+local enemyColorGroup = createHSVColorPickerGroup(EspSettingsFrame, "Warna Musuh", enemyColor, function(newColor)
+    enemyColor = newColor
+end)
+enemyColorGroup.LayoutOrder = 2
+
 
 -- == Head Size Feature UI (Toggle Switch) ==
 local HeadSizeToggleFrame, setHeadSizeSwitchState = createToggleSwitch(ContentFrame, "Head Size", isHeadSizeActive, function(state) -- <<< (MINI) Teks diringkas
@@ -767,37 +1361,139 @@ SizeTextBox.TextColor3 = Color3.new(1,1,1)
 SizeTextBox.Parent = InputFrame
 local stCorner = Instance.new("UICorner", SizeTextBox); stCorner.CornerRadius = UDim.new(0, 4)
 
--- == ESP Toggles ==
-local EspNameToggleFrame, setEspNameSwitchState = createToggleSwitch(ContentFrame, "ESP Nama", IsEspNameEnabled, function(state) -- <<< (MINI) Teks diringkas
+
+-- == [BARU v8] Master ESP Toggle (Gaya ArexansTools) ==
+local headerContainer = Instance.new("Frame")
+headerContainer.Name = "MasterHeaderContainer"
+headerContainer.Size = UDim2.new(1, 0, 0, 25)
+headerContainer.BackgroundTransparency = 1
+headerContainer.LayoutOrder = 3 -- Urutan Tampil
+headerContainer.Parent = ContentFrame
+
+local collapseButton = Instance.new("TextButton", headerContainer)
+collapseButton.Size = UDim2.new(1, 0, 1, 0)
+collapseButton.Position = UDim2.new(0, 0, 0, 0)
+collapseButton.BackgroundTransparency = 1
+collapseButton.Text = ""
+collapseButton.AutoButtonColor = false
+
+local titleLabel = Instance.new("TextLabel", collapseButton)
+titleLabel.Size = UDim2.new(1, -45, 1, 0) -- Beri ruang untuk 2 ikon
+titleLabel.Position = UDim2.new(0, 25, 0, 0) -- Indent untuk ikon gear
+titleLabel.BackgroundTransparency = 1
+titleLabel.Font = Enum.Font.SourceSans
+titleLabel.TextSize = 11 -- <<< (MINI) Font diperkecil
+titleLabel.Text = "Tampilkan ESP"
+titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.Active = false -- [BARU v10] Agar tidak memblokir klik pada collapseButton
+
+local triangleIcon = Instance.new("TextLabel", collapseButton)
+triangleIcon.Size = UDim2.new(0, 20, 1, 0)
+triangleIcon.Position = UDim2.new(1, -20, 0, 0)
+triangleIcon.BackgroundTransparency = 1
+triangleIcon.Font = Enum.Font.SourceSansBold
+triangleIcon.TextSize = 16
+triangleIcon.Text = isMasterEspEnabled and "▲" or "▼" -- Set status awal
+triangleIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
+triangleIcon.TextXAlignment = Enum.TextXAlignment.Right
+triangleIcon.Active = false -- [BARU v10] Agar tidak memblokir klik pada collapseButton
+
+local settingsButton = Instance.new("TextButton", headerContainer)
+settingsButton.Name = "SettingsButton"
+settingsButton.Size = UDim2.new(0, 20, 0, 20)
+settingsButton.Position = UDim2.new(0, 0, 0.5, -10)
+settingsButton.BackgroundTransparency = 1
+settingsButton.Text = "⚙️"
+settingsButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+settingsButton.TextSize = 16
+settingsButton.Font = Enum.Font.SourceSansBold
+settingsButton.TextXAlignment = Enum.TextXAlignment.Left
+
+-- == [BARU v8] Kontainer untuk Opsi ESP ==
+local espOptionsContainer = Instance.new("Frame", ContentFrame)
+espOptionsContainer.Name = "EspOptionsContainer"
+espOptionsContainer.Size = UDim2.new(1, 0, 0, 0) -- Ukuran Y Otomatis
+espOptionsContainer.AutomaticSize = Enum.AutomaticSize.Y
+espOptionsContainer.BackgroundTransparency = 1
+espOptionsContainer.LayoutOrder = 4 -- Tepat di bawah master toggle
+espOptionsContainer.Visible = isMasterEspEnabled -- Set visibilitas awal
+espOptionsContainer.ClipsDescendants = true
+
+local espOptionsLayout = Instance.new("UIListLayout", espOptionsContainer)
+espOptionsLayout.Padding = UDim.new(0, 2)
+espOptionsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+local espOptionsPadding = Instance.new("UIPadding", espOptionsContainer)
+espOptionsPadding.PaddingLeft = UDim.new(0, 10) -- Indent opsi
+
+
+-- == ESP Toggles (DIPINDAHKAN ke espOptionsContainer) ==
+local EspNameToggleFrame, setEspNameSwitchState = createToggleSwitch(espOptionsContainer, "ESP Nama/Jarak", IsEspNameEnabled, function(state) -- << PARENT DIUBAH
     ToggleESPName(state)
 end)
-EspNameToggleFrame.LayoutOrder = 3
+EspNameToggleFrame.LayoutOrder = 1 -- << URUTAN DIUBAH
+-- [PERBAIKAN v11] Dihapus: EspNameToggleFrame.Visible = isMasterEspEnabled
 
-local EspBodyToggleFrame, setEspBodySwitchState = createToggleSwitch(ContentFrame, "ESP Tubuh", IsEspBodyEnabled, function(state) -- <<< (MINI) Teks diringkas
+local EspHealthToggleFrame, setEspHealthSwitchState = createToggleSwitch(espOptionsContainer, "ESP Health", IsEspHealthBarEnabled, function(state) -- << PARENT DIUBAH
+    ToggleESPHealthBar(state)
+end)
+EspHealthToggleFrame.LayoutOrder = 2 -- << URUTAN DIUBAH
+-- [PERBAIKAN v11] Dihapus: EspHealthToggleFrame.Visible = isMasterEspEnabled
+
+local EspBodyToggleFrame, setEspBodySwitchState = createToggleSwitch(espOptionsContainer, "ESP Tubuh", IsEspBodyEnabled, function(state) -- << PARENT DIUBAH
     ToggleESPBody(state)
 end)
-EspBodyToggleFrame.LayoutOrder = 4
+EspBodyToggleFrame.LayoutOrder = 3 -- << URUTAN DIUBAH
+-- [PERBAIKAN v11] Dihapus: EspBodyToggleFrame.Visible = isMasterEspEnabled
+
+local EspLineToggleFrame, setEspLineSwitchState = createToggleSwitch(espOptionsContainer, "ESP Garis", IsEspLineEnabled, function(state) -- << PARENT DIUBAH
+    ToggleESPLine(state)
+end)
+EspLineToggleFrame.LayoutOrder = 4 -- << URUTAN DIUBAH
+-- [PERBAIKAN v11] Dihapus: EspLineToggleFrame.Visible = isMasterEspEnabled
+
+-- == [BARU v8] Logika untuk Master ESP Toggle baru ==
+collapseButton.MouseButton1Click:Connect(function()
+    isMasterEspEnabled = not isMasterEspEnabled
+    triangleIcon.Text = isMasterEspEnabled and "▲" or "▼"
+    espOptionsContainer.Visible = isMasterEspEnabled
+
+    -- Sinkronkan semua toggle anak saat master di-klik
+    -- Hanya ubah status fitur jika master di-toggle
+    ToggleESPName(isMasterEspEnabled)
+    ToggleESPHealthBar(isMasterEspEnabled)
+    ToggleESPBody(isMasterEspEnabled)
+    ToggleESPLine(isMasterEspEnabled)
+    
+    setEspNameSwitchState(isMasterEspEnabled)
+    setEspHealthSwitchState(isMasterEspEnabled)
+    setEspBodySwitchState(isMasterEspEnabled)
+    setEspLineSwitchState(isMasterEspEnabled)
+end)
+
+settingsButton.MouseButton1Click:Connect(function()
+    -- Tampilkan frame pengaturan, sembunyikan frame konten
+    EspSettingsFrame.Visible = true
+    ContentFrame.Visible = false
+end)
+
 
 -- == Aimbot Toggles (BARU dari cit.lua) ==
 local AimbotToggleFrame, setAimbotSwitchState = createToggleSwitch(ContentFrame, "Aimbot", AimbotEnabled, function(state) -- <<< (MINI) Teks diringkas
     AimbotEnabled = state
 end)
-AimbotToggleFrame.LayoutOrder = 5
+AimbotToggleFrame.LayoutOrder = 5 -- << [BARU v8] Urutan diubah
 
 local WallCheckToggleFrame, setWallCheckSwitchState = createToggleSwitch(ContentFrame, "WallCheck", WallCheck, function(state) -- <<< (MINI) Teks diringkas
     WallCheck = state
 end)
-WallCheckToggleFrame.LayoutOrder = 6
-
-local TeamCheckToggleFrame, setTeamCheckSwitchState = createToggleSwitch(ContentFrame, "TeamCheck", TeamCheck, function(state) -- <<< (MINI) Teks diringkas
-    TeamCheck = state
-end)
-TeamCheckToggleFrame.LayoutOrder = 7
+WallCheckToggleFrame.LayoutOrder = 6 -- << [BARU v8] Urutan diubah
 
 local ShowFovToggleFrame, setShowFovSwitchState = createToggleSwitch(ContentFrame, "Show FOV", ShowFOV, function(state) -- <<< (MINI) Teks diringkas
     ShowFOV = state
 end)
-ShowFovToggleFrame.LayoutOrder = 8
+ShowFovToggleFrame.LayoutOrder = 7 -- << [BARU v8] Urutan diubah
 if not FOVCircle then
     ShowFovToggleFrame.Visible = false -- Sembunyikan toggle jika Drawing lib tidak ada
 end
@@ -810,7 +1506,7 @@ aimPartButton.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
 aimPartButton.Font = Enum.Font.SourceSans
 aimPartButton.TextSize = 11 -- <<< (MINI) Font diperkecil
 aimPartButton.TextColor3 = Color3.new(1,1,1)
-aimPartButton.LayoutOrder = 9
+aimPartButton.LayoutOrder = 8 -- << [BARU v8] Urutan diubah
 aimPartButton.Parent = ContentFrame
 local apCorner = Instance.new("UICorner", aimPartButton); apCorner.CornerRadius = UDim.new(0, 4)
 local parts = {"Head", "Torso", "UpperTorso", "LowerTorso"}
@@ -827,7 +1523,7 @@ local FovFrame = Instance.new("Frame")
 FovFrame.Name = "FovFrame"
 FovFrame.Size = UDim2.new(1, 0, 0, 25)
 FovFrame.BackgroundTransparency = 1
-FovFrame.LayoutOrder = 10
+FovFrame.LayoutOrder = 9 -- << [BARU v8] Urutan diubah
 FovFrame.Parent = ContentFrame
 local FovLayout = Instance.new("UIListLayout")
 FovLayout.FillDirection = Enum.FillDirection.Horizontal
@@ -879,7 +1575,7 @@ local SmoothFrame = Instance.new("Frame")
 SmoothFrame.Name = "SmoothFrame"
 SmoothFrame.Size = UDim2.new(1, 0, 0, 25)
 SmoothFrame.BackgroundTransparency = 1
-SmoothFrame.LayoutOrder = 11
+SmoothFrame.LayoutOrder = 10 -- << [BARU v8] Urutan diubah
 SmoothFrame.Parent = ContentFrame
 local SmoothLayout = Instance.new("UIListLayout")
 SmoothLayout.FillDirection = Enum.FillDirection.Horizontal
@@ -937,7 +1633,7 @@ InfoLabel.Text = "Target: All, Others, Me, Nick" -- <<< (MINI) Teks diringkas
 InfoLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
 InfoLabel.TextXAlignment = Enum.TextXAlignment.Left
 InfoLabel.TextWrapped = true
-InfoLabel.LayoutOrder = 12
+InfoLabel.LayoutOrder = 11 -- << [BARU v8] Urutan diubah
 InfoLabel.Parent = ContentFrame
 
 --====================================================================--
@@ -952,17 +1648,34 @@ local minimizeTweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.Easing
 
 MinimizeButton.MouseButton1Click:Connect(function()
     isMinimized = not isMinimized
-    local targetSize = isMinimized and minimizedSize or originalSize
+    local targetSize
+    if isMinimized then
+        originalSize = MainFrame.Size -- [BARU v9] Simpan ukuran saat ini sebelum minimize
+        targetSize = minimizedSize
+    else
+        targetSize = originalSize
+    end
+    
     ContentFrame.Visible = not isMinimized -- Hide/show content instantly
+    EspSettingsFrame.Visible = false -- [BARU v8] Selalu sembunyikan pengaturan saat minimize
+    
+    -- [[ PERBAIKAN v12 DIMULAI DI SINI ]]
+    -- Sembunyikan pegangan pengubah ukuran saat diminimalkan agar tidak tumpang tindih dengan tombol X
+    MainResizeHandle.Visible = not isMinimized 
+    -- [[ PERBAIKAN v12 SELESAI ]]
+
     TweenService:Create(MainFrame, minimizeTweenInfo, {Size = targetSize}):Play()
     MinimizeButton.Text = isMinimized and "+" or "-" -- Change button text
 end)
 
 -- Close Button Logic
 CloseButton.MouseButton1Click:Connect(function()
+    saveGuiPositions() -- [BARU v9] Simpan posisi/ukuran saat ditutup
     if isHeadSizeActive then toggleHeadSizeFeature(false) end
     if IsEspNameEnabled then ToggleESPName(false) end -- Turn off ESP on close
     if IsEspBodyEnabled then ToggleESPBody(false) end
+    if IsEspLineEnabled then ToggleESPLine(false) end
+    if IsEspHealthBarEnabled then ToggleESPHealthBar(false) end
     AimbotEnabled = false -- Turn off Aimbot on close
     if FOVCircle then FOVCircle.Visible = false end
     ScreenGui:Destroy()
@@ -972,23 +1685,9 @@ end)
 TargetTextBox.FocusLost:Connect(function(enterPressed)
     local newTarget = TargetTextBox.Text
     if newTarget ~= currentTarget then
-        if isHeadSizeActive then
-            revertHeadSize() -- Revert previous target(s)
-        end
+        -- [PERUBAHAN v7] Tidak perlu meng-apply manual, cukup set variabel.
+        -- Loop Heartbeat akan menangani sisanya secara otomatis.
         currentTarget = newTarget
-        if isHeadSizeActive then
-             local playersToModify = getPlayer(currentTarget)
-             local appliedCount = 0
-             for _, player in ipairs(playersToModify) do
-                 if player ~= LocalPlayer then
-                     if applyHeadSizeToPlayer(player, currentSize) then
-                         appliedCount = appliedCount + 1
-                     end
-                 end
-             end
-             print("Target changed. Applied initially to " .. appliedCount .. " players.")
-            startHeadSizeLoop()
-        end
         print("Target set to:", currentTarget)
     end
 end)
@@ -998,20 +1697,9 @@ SizeTextBox.FocusLost:Connect(function(enterPressed)
     local newSize = tonumber(SizeTextBox.Text)
     if newSize and newSize > 0 then
         if newSize ~= currentSize then
+            -- [PERUBAHAN v7] Tidak perlu meng-apply manual, cukup set variabel.
+            -- Loop Heartbeat akan menangani sisanya secara otomatis.
             currentSize = newSize
-            if isHeadSizeActive then
-                 local playersToModify = getPlayer(currentTarget)
-                 local appliedCount = 0
-                 for _, player in ipairs(playersToModify) do
-                      if player ~= LocalPlayer then
-                         if applyHeadSizeToPlayer(player, currentSize) then
-                             appliedCount = appliedCount + 1
-                         end
-                     end
-                 end
-                 print("Size changed. Re-applied to " .. appliedCount .. " players.")
-                 -- Loop will update automatically
-            end
             print("Size set to:", currentSize)
         end
     else
@@ -1023,37 +1711,23 @@ end)
 -- Cleanup on character removal or player leaving
 local function playerRemoving(player)
     if player == LocalPlayer then return end
-    if originalHeadSizes[player] then
-        originalHeadSizes[player] = nil
-    end
-    -- Clean up ESP cache for the leaving player
-    local espElements = espCache[player]
-    if espElements then
-        if espElements.billboard then espElements.billboard:Destroy() end
-        if espElements.highlight then espElements.highlight:Destroy() end
-        espCache[player] = nil
-    end
+    
+    -- [PERUBAHAN v7] Panggil fungsi revert spesifik
+    revertHeadSizeForPlayer(player)
+    
+    -- Clean up ESP cache for the leaving player (dari esp.lua)
+    cleanupPlayerESP(player.UserId)
 end
 local playerRemovingConn = Players.PlayerRemoving:Connect(playerRemoving)
 
 -- Handle character respawns
 local function characterAdded(character)
-    local player = Players:GetPlayerFromCharacter(character)
-    if player and player ~= LocalPlayer then
-        -- Reapply Head Size if active and player is target
-        if isHeadSizeActive then
-            local playersToModify = getPlayer(currentTarget)
-            local isTarget = false
-            for _, p in ipairs(playersToModify) do
-                if p == player then isTarget = true; break end
-            end
-            if isTarget then
-                task.wait(0.5)
-                applyHeadSizeToPlayer(player, currentSize)
-            end
-        end
-        -- ESP will be handled automatically by the UpdateESP loop
-    end
+    -- [PERUBAHAN v7] Logika Headsize dihapus dari sini.
+    -- Loop Heartbeat (startHeadSizeLoop) sekarang menangani pemain baru/respawn secara instan.
+    
+    -- Logika ESP akan ditangani secara otomatis oleh loop UpdateESP (RenderStepped)
+    
+    -- ( task.wait(0.5) dan applyHeadSizeToPlayer() DIHAPUS DARI SINI )
 end
 
 local characterAddedConnections = {}
@@ -1071,11 +1745,13 @@ ScreenGui.Destroying:Connect(function()
     if isHeadSizeActive then toggleHeadSizeFeature(false) end
     if IsEspNameEnabled then ToggleESPName(false) end
     if IsEspBodyEnabled then ToggleESPBody(false) end
+    if IsEspLineEnabled then ToggleESPLine(false) end
+    if IsEspHealthBarEnabled then ToggleESPHealthBar(false) end
     AimbotEnabled = false
     if FOVCircle then FOVCircle.Visible = false; FOVCircle:Destroy() end
     
     -- Hentikan semua koneksi
-    if EspRenderConnection then EspRenderConnection:Disconnect() end
+    if EspRenderConnection then EspRenderConnection:Disconnect() end -- (dari esp.lua)
     if AimbotRenderConnection then AimbotRenderConnection:Disconnect() end
     if headSizeLoopConnection then headSizeLoopConnection:Disconnect() end
     
@@ -1085,26 +1761,27 @@ ScreenGui.Destroying:Connect(function()
     characterAddedConnections = {}
 
     -- Hapus semua cache ESP
-    for player, elements in pairs(espCache) do
-        if elements.billboard then elements.billboard:Destroy() end
-        if elements.highlight then elements.highlight:Destroy() end
-    end
-    espCache = {}
+    cleanupAllESP() -- (dari esp.lua)
     
     print("Skrip Gabungan dibersihkan.")
 end)
 
 -- Initial State Updates
 setHeadSizeSwitchState(isHeadSizeActive) -- Set initial visual state for switches
-setEspNameSwitchState(IsEspNameEnabled)
-setEspBodySwitchState(IsEspBodyEnabled)
+-- [DIHAPUS v8] setMasterEspSwitchState(isMasterEspEnabled) -- (Sudah diatur oleh UI baru)
+setEspNameSwitchState(IsEspNameEnabled) -- (dari esp.lua)
+setEspHealthSwitchState(IsEspHealthBarEnabled) -- (dari esp.lua)
+setEspBodySwitchState(IsEspBodyEnabled) -- (dari esp.lua)
+setEspLineSwitchState(IsEspLineEnabled) -- (dari esp.lua)
 setAimbotSwitchState(AimbotEnabled)
 setWallCheckSwitchState(WallCheck)
-setTeamCheckSwitchState(TeamCheck)
+-- setTeamCheckSwitchState(TeamCheck) -- <<< DIHAPUS (Sekarang Otomatis)
 setShowFovSwitchState(ShowFOV)
 
-manageEspConnection() -- Start ESP loop if needed on load
+manageEspConnection() -- Start ESP loop if needed on load (dari esp.lua)
+toggleHeadSizeFeature(isHeadSizeActive) -- [PERUBAHAN v7] Panggil fungsi toggle utama untuk memulai loop jika 'true'
 
-print("GUI Gabungan (Super Mini) dimuat.")
+loadGuiPositions() -- [BARU v9] Terapkan posisi/ukuran yang disimpan
+print("GUI Gabungan (Super Mini) dimuat dengan ESP baru dan Headsize Instan.")
 
 
